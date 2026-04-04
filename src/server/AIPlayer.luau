@@ -4,6 +4,13 @@ local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Co
 local AIPlayer = {}
 AIPlayer.__index = AIPlayer
 
+-- 존별 발사 프리셋 (경험적 최적값)
+local ZONE_PRESETS = {
+	[1] = { power = 30, powerJitter = 2 },  -- Zone1: Z=-12, 거리 28 studs
+	[2] = { power = 38, powerJitter = 2 },  -- Zone2: Z=6, 거리 46 studs
+	[3] = { power = 45, powerJitter = 3 },  -- Zone3: Z=24, 거리 64 studs
+}
+
 function AIPlayer.new(slotPositions: { [number]: { Vector3 } })
 	local self = setmetatable({}, AIPlayer)
 	self.slotPositions = slotPositions
@@ -11,44 +18,39 @@ function AIPlayer.new(slotPositions: { [number]: { Vector3 } })
 	return self
 end
 
--- AI가 발사 파라미터를 결정 (방향, 파워, 스핀)
-function AIPlayer:decide(slotOwners: { [number]: { string? } }): (Vector3, number, number)
+-- AI가 발사 파라미터를 결정 (방향, 파워, 스핀, 발사X위치)
+function AIPlayer:decide(slotOwners: { [number]: { string? } }): (Vector3, number, number, number)
 	local targetZone, targetSlot = self:_pickTarget(slotOwners)
 	local targetPos = self.slotPositions[targetZone][targetSlot]
 
-	local launchPos = Vector3.new(0, Config.TABLE.HEIGHT + Config.LAUNCH.SPAWN_Y_OFFSET, Config.LAUNCH.SPAWN_Z)
-	local toTarget = targetPos - launchPos
-	local horizontalDist = Vector3.new(toTarget.X, 0, toTarget.Z).Magnitude
-
-	local errorScale = 1 - self.skill
-
-	-- 발사 전략: 좌우에서 약간 벗어나서 적절한 스핀으로 커브
+	-- 좌우 중 하나 선택
 	local side = math.random() < 0.5 and -1 or 1
 
-	-- 발사 위치: 중심에서 2~5 벗어남 (과하지 않게)
-	local aimX = side * (2 + math.random() * 3)
+	-- 발사 위치: 엣지 근처 (6~9)
+	local spawnX = side * (6 + math.random() * 3)
 
-	-- 스핀: 발사 위치 반대 방향으로 (왼쪽에서 쏘면 오른쪽 스핀)
-	-- side=-1(왼쪽발사) → spin 양수(오른쪽커브)
-	-- side=+1(오른쪽발사) → spin 음수(왼쪽커브)
-	local spin = -side * (0.15 + math.random() * 0.25) -- 적당한 세기 (0.15~0.4)
+	-- 스핀: 발사 반대 방향으로 커브 (0.10~0.18)
+	local spin = -side * (0.10 + math.random() * 0.08)
 
-	-- 파워: 타겟 존 거리 비례
-	local basePower = math.clamp(horizontalDist / (Config.TABLE.LENGTH * 0.45), 0.3, 0.75)
+	-- 파워: 존별 프리셋
+	local preset = ZONE_PRESETS[targetZone]
+	local power = preset.power + (math.random() - 0.5) * preset.powerJitter * 2
 
-	-- 파워 계산
-	local power = Config.LAUNCH.MIN_POWER + (Config.LAUNCH.MAX_POWER - Config.LAUNCH.MIN_POWER) * basePower
-	local powerError = (math.random() - 0.5) * Config.AI.POWER_ERROR_MAX * errorScale
-	power = math.clamp(power + powerError, Config.LAUNCH.MIN_POWER, Config.LAUNCH.MAX_POWER)
+	-- 방향: spawnX에서 타겟을 향해
+	local dx = targetPos.X - spawnX
+	local dz = targetPos.Z - Config.LAUNCH.SPAWN_Z
 
-	-- 에임 오차
-	local aimError = (math.random() - 0.5) * Config.AI.AIM_ERROR_MAX * errorScale
-	local direction = Vector3.new(aimX + aimError, 0, toTarget.Z).Unit
+	-- 스킬 기반 소폭 오차
+	local errorScale = 1 - self.skill
+	local aimError = (math.random() - 0.5) * 1.0 * errorScale
+	local direction = Vector3.new(dx + aimError, 0, dz).Unit
 
-	-- 스핀 오차
-	spin = math.clamp(spin + (math.random() - 0.5) * 0.2 * errorScale, -1, 1)
+	-- 파워/스핀 소폭 오차
+	power = math.clamp(power + (math.random() - 0.5) * 4 * errorScale, Config.LAUNCH.MIN_POWER, Config.LAUNCH.MAX_POWER)
+	spin = math.clamp(spin + (math.random() - 0.5) * 0.06 * errorScale, -1, 1)
+	spawnX = math.clamp(spawnX, -Config.LAUNCH.SPAWN_X_RANGE, Config.LAUNCH.SPAWN_X_RANGE)
 
-	return direction, power, spin
+	return direction, power, spin, spawnX
 end
 
 function AIPlayer:_pickTarget(slotOwners)

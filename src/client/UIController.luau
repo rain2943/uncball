@@ -32,8 +32,7 @@ function UIController:_createUI()
 	self:_createBottomBar(gui)
 	self:_createTurnIndicator(gui)
 	self:_createResultScreen(gui)
-	self:_createComboPanel(gui)
-	self.comboAchievedKeys = {}
+	self:_createMissionPanel(gui)
 end
 
 -- ===== 상단: 타이틀 + 버튼 =====
@@ -417,101 +416,216 @@ function UIController:_createResultScreen(gui)
 	self.elements.resultScore = resultScore
 end
 
--- ===== 콤보 트래커 패널 (좌측 컴팩트) =====
-function UIController:_createComboPanel(gui)
-	local ROW_H = 22
+-- ===== 미션 카드 패널 (좌측) =====
+function UIController:_createMissionPanel(gui)
 	local PAD = 8
-	local numCombos = #Config.COMBO_ORDER
-	local panelH = PAD + 20 + PAD / 2 + numCombos * (ROW_H + 3) + PAD
+	local CARD_H = 42
+	local GAP = 5
+	local panelH = PAD + 3 * CARD_H + 2 * GAP + PAD
 
 	local panel = Instance.new("Frame")
-	panel.Name = "ComboPanel"
-	panel.Size = UDim2.new(0, 140, 0, panelH)
-	panel.Position = UDim2.new(0, 6, 0.25, 0)
+	panel.Name = "MissionPanel"
+	panel.Size = UDim2.new(0, 210, 0, panelH)
+	panel.Position = UDim2.new(0, 6, 0.22, 0)
 	panel.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
-	panel.BackgroundTransparency = 0.3
+	panel.BackgroundTransparency = 0.4
 	panel.BorderSizePixel = 0
+	panel.ClipsDescendants = true
 	panel.Parent = gui
 
 	local panelCorner = Instance.new("UICorner")
-	panelCorner.CornerRadius = UDim.new(0, 8)
+	panelCorner.CornerRadius = UDim.new(0, 10)
 	panelCorner.Parent = panel
 
-	-- 타이틀
-	local title = Instance.new("TextLabel")
-	title.Name = "ComboTitle"
-	title.Size = UDim2.new(1, -PAD * 2, 0, 16)
-	title.Position = UDim2.new(0, PAD, 0, PAD)
-	title.BackgroundTransparency = 1
-	title.Text = "COMBOS"
-	title.TextColor3 = Color3.fromRGB(255, 210, 50)
-	title.Font = Enum.Font.GothamBlack
-	title.TextSize = 13
-	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Parent = panel
+	-- 미션 카드 3개
+	self.elements.missionCards = {}
+	local yOffset = PAD
 
-	-- 콤보 행들 — 고정 텍스트 크기로 통일
-	self.elements.comboRows = {}
-	local yOffset = PAD + 20
+	for i = 1, 3 do
+		local card = Instance.new("Frame")
+		card.Name = "Mission_" .. i
+		card.Size = UDim2.new(1, -PAD * 2, 0, CARD_H)
+		card.Position = UDim2.new(0, PAD, 0, yOffset)
+		card.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
+		card.BackgroundTransparency = 0.15
+		card.BorderSizePixel = 0
+		card.ClipsDescendants = true
+		card.Parent = panel
 
-	for _, comboKey in Config.COMBO_ORDER do
-		local comboDef = Config.COMBOS[comboKey]
+		local cardCorner = Instance.new("UICorner")
+		cardCorner.CornerRadius = UDim.new(0, 8)
+		cardCorner.Parent = card
 
-		local row = Instance.new("Frame")
-		row.Name = "Combo_" .. comboKey
-		row.Size = UDim2.new(1, -PAD * 2, 0, ROW_H)
-		row.Position = UDim2.new(0, PAD, 0, yOffset)
-		row.BackgroundTransparency = 1
-		row.Parent = panel
+		-- 보너스 (좌측, 크게)
+		local bonusLabel = Instance.new("TextLabel")
+		bonusLabel.Name = "Bonus"
+		bonusLabel.Size = UDim2.new(0, 38, 1, 0)
+		bonusLabel.Position = UDim2.new(0, 6, 0, 0)
+		bonusLabel.BackgroundTransparency = 1
+		bonusLabel.Text = ""
+		bonusLabel.TextColor3 = Color3.fromRGB(255, 210, 50)
+		bonusLabel.Font = Enum.Font.GothamBlack
+		bonusLabel.TextSize = 18
+		bonusLabel.TextXAlignment = Enum.TextXAlignment.Center
+		bonusLabel.Parent = card
 
-		-- 이름 (고정 크기)
-		local label = Instance.new("TextLabel")
-		label.Name = "Label"
-		label.Size = UDim2.new(1, -36, 1, 0)
-		label.Position = UDim2.new(0, 0, 0, 0)
-		label.BackgroundTransparency = 1
-		label.Text = comboDef.name
-		label.TextColor3 = Color3.fromRGB(95, 95, 105)
-		label.Font = Enum.Font.GothamMedium
-		label.TextSize = 11
-		label.TextXAlignment = Enum.TextXAlignment.Left
-		label.TextTruncate = Enum.TextTruncate.AtEnd
-		label.Parent = row
+		-- 레터 버블 컨테이너 (보너스 오른쪽, 넉넉한 여백)
+		local letterContainer = Instance.new("Frame")
+		letterContainer.Name = "Letters"
+		letterContainer.Size = UDim2.new(1, -56, 1, -8)
+		letterContainer.Position = UDim2.new(0, 48, 0, 4)
+		letterContainer.BackgroundTransparency = 1
+		letterContainer.ClipsDescendants = true
+		letterContainer.Parent = card
 
-		-- 보너스 값 (오른쪽 정렬, 고정 크기)
-		local bonus = Instance.new("TextLabel")
-		bonus.Name = "Bonus"
-		bonus.Size = UDim2.new(0, 34, 1, 0)
-		bonus.Position = UDim2.new(1, -34, 0, 0)
-		bonus.BackgroundTransparency = 1
-		bonus.Text = "+" .. comboDef.bonus
-		bonus.TextColor3 = Color3.fromRGB(75, 75, 85)
-		bonus.Font = Enum.Font.GothamBold
-		bonus.TextSize = 11
-		bonus.TextXAlignment = Enum.TextXAlignment.Right
-		bonus.Parent = row
+		local letterLayout = Instance.new("UIListLayout")
+		letterLayout.FillDirection = Enum.FillDirection.Horizontal
+		letterLayout.Padding = UDim.new(0, 4)
+		letterLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+		letterLayout.Parent = letterContainer
 
-		self.elements.comboRows[comboKey] = {
-			row = row,
-			label = label,
-			bonus = bonus,
-			achieved = false,
+		-- 상태 오버레이 (CLEAR / TAKEN)
+		local statusLabel = Instance.new("TextLabel")
+		statusLabel.Name = "Status"
+		statusLabel.Size = UDim2.new(1, 0, 1, 0)
+		statusLabel.BackgroundTransparency = 1
+		statusLabel.Text = ""
+		statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+		statusLabel.Font = Enum.Font.GothamBlack
+		statusLabel.TextSize = 16
+		statusLabel.ZIndex = 3
+		statusLabel.Visible = false
+		statusLabel.Parent = card
+
+		self.elements.missionCards[i] = {
+			card = card,
+			letterContainer = letterContainer,
+			bonusLabel = bonusLabel,
+			statusLabel = statusLabel,
+			letterBubbles = {},
 		}
 
-		yOffset = yOffset + ROW_H + 3
+		yOffset = yOffset + CARD_H + GAP
 	end
 
-	self.elements.comboPanel = panel
+	self.elements.missionPanel = panel
 end
 
--- ===== 콤보 팝업 알림 (화면 중앙) =====
-function UIController:_showComboPopup(comboName: string, bonus: number, icon: string)
+-- 미션 초기화 (매치 시작 시 서버에서 받은 미션 데이터로)
+function UIController:initMissions(missions)
+	if not missions then return end
+
+	for idx, mission in missions do
+		local cardData = self.elements.missionCards[idx]
+		if not cardData then continue end
+
+		-- 보너스 텍스트 (크게)
+		cardData.bonusLabel.Text = "+" .. mission.bonus
+		cardData.bonusLabel.TextColor3 = Color3.fromRGB(255, 210, 50)
+
+		-- 기존 레터 버블 삭제
+		for _, bubble in cardData.letterBubbles do
+			bubble:Destroy()
+		end
+		cardData.letterBubbles = {}
+
+		-- 레터 버블 생성 (모바일 터치 고려)
+		for i, letter in mission.letters do
+			local bubble = Instance.new("Frame")
+			bubble.Name = "Letter_" .. i
+			bubble.Size = UDim2.new(0, 28, 0, 28)
+			bubble.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+			bubble.BorderSizePixel = 0
+
+			local bubbleCorner = Instance.new("UICorner")
+			bubbleCorner.CornerRadius = UDim.new(0, 6)
+			bubbleCorner.Parent = bubble
+
+			local letterLabel = Instance.new("TextLabel")
+			letterLabel.Name = "Text"
+			letterLabel.Size = UDim2.new(1, 0, 1, 0)
+			letterLabel.BackgroundTransparency = 1
+			letterLabel.Text = letter
+			letterLabel.TextColor3 = Color3.fromRGB(120, 120, 135)
+			letterLabel.Font = Enum.Font.GothamBlack
+			letterLabel.TextSize = 15
+			letterLabel.Parent = bubble
+
+			bubble.Parent = cardData.letterContainer
+			table.insert(cardData.letterBubbles, bubble)
+		end
+
+		-- 상태 리셋
+		cardData.statusLabel.Visible = false
+		cardData.card.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
+	end
+end
+
+-- ===== 미션 상태 업데이트 (매 턴) =====
+function UIController:updateMissions(missions, playerLetters)
+	if not missions then return end
+
+	-- 플레이어 보유 레터 카운트 (playerLetters가 없으면 missions에서 추론 불가하므로 패스)
+	for idx, mission in missions do
+		local cardData = self.elements.missionCards[idx]
+		if not cardData then continue end
+
+		if mission.claimedBy then
+			-- 선점된 미션
+			if mission.claimedBy == "player" then
+				cardData.card.BackgroundColor3 = Color3.fromRGB(30, 80, 40)
+				cardData.statusLabel.Text = "CLEAR!"
+				cardData.statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+				cardData.bonusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+			else
+				cardData.card.BackgroundColor3 = Color3.fromRGB(50, 40, 40)
+				cardData.statusLabel.Text = "TAKEN"
+				cardData.statusLabel.TextColor3 = Color3.fromRGB(150, 80, 80)
+				cardData.bonusLabel.TextColor3 = Color3.fromRGB(80, 80, 85)
+				-- 레터 어둡게
+				for _, bubble in cardData.letterBubbles do
+					bubble.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+					local txt = bubble:FindFirstChild("Text")
+					if txt then txt.TextColor3 = Color3.fromRGB(70, 70, 75) end
+				end
+			end
+			cardData.statusLabel.Visible = true
+		elseif playerLetters then
+			-- 미선점 → 보유 레터에 따라 버블 하이라이트
+			local required = {}
+			for _, letter in mission.letters do
+				required[letter] = (required[letter] or 0) + 1
+			end
+			local used = {}
+			for i, letter in mission.letters do
+				used[letter] = (used[letter] or 0) + 1
+				local have = playerLetters[letter] or 0
+				local bubble = cardData.letterBubbles[i]
+				if bubble then
+					local txt = bubble:FindFirstChild("Text")
+					if have >= used[letter] then
+						-- 보유함 → 밝게
+						bubble.BackgroundColor3 = Color3.fromRGB(60, 120, 200)
+						if txt then txt.TextColor3 = Color3.fromRGB(255, 255, 255) end
+					else
+						-- 미보유 → 어둡게
+						bubble.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+						if txt then txt.TextColor3 = Color3.fromRGB(120, 120, 135) end
+					end
+				end
+			end
+		end
+	end
+end
+
+-- ===== 미션 완료 팝업 (화면 중앙) =====
+function UIController:_showMissionPopup(mission)
 	local popup = Instance.new("Frame")
-	popup.Name = "ComboPopup"
+	popup.Name = "MissionPopup"
 	popup.Size = UDim2.new(0, 0, 0, 0)
 	popup.Position = UDim2.new(0.5, 0, 0.4, 0)
 	popup.AnchorPoint = Vector2.new(0.5, 0.5)
-	popup.BackgroundColor3 = Color3.fromRGB(30, 25, 50)
+	popup.BackgroundColor3 = Color3.fromRGB(25, 40, 60)
 	popup.BackgroundTransparency = 0.1
 	popup.BorderSizePixel = 0
 	popup.ZIndex = 10
@@ -521,136 +635,75 @@ function UIController:_showComboPopup(comboName: string, bonus: number, icon: st
 	corner.CornerRadius = UDim.new(0, 12)
 	corner.Parent = popup
 
-	-- 글로우 스트로크
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(255, 215, 50)
+	stroke.Color = Color3.fromRGB(100, 200, 255)
 	stroke.Thickness = 2
 	stroke.Transparency = 0
 	stroke.Parent = popup
 
-	-- 콤보 아이콘
-	local iconLabel = Instance.new("TextLabel")
-	iconLabel.Name = "Icon"
-	iconLabel.Size = UDim2.new(0, 36, 0, 36)
-	iconLabel.Position = UDim2.new(0, 12, 0.5, -18)
-	iconLabel.BackgroundColor3 = Color3.fromRGB(255, 215, 50)
-	iconLabel.BackgroundTransparency = 0.2
-	iconLabel.Text = icon
-	iconLabel.TextColor3 = Color3.fromRGB(30, 25, 50)
-	iconLabel.TextScaled = true
-	iconLabel.Font = Enum.Font.GothamBlack
-	iconLabel.BorderSizePixel = 0
-	iconLabel.ZIndex = 11
-	iconLabel.Parent = popup
+	-- "MISSION COMPLETE!"
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.Name = "Title"
+	titleLabel.Size = UDim2.new(1, -16, 0.45, 0)
+	titleLabel.Position = UDim2.new(0, 8, 0, 4)
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.Text = "MISSION COMPLETE!"
+	titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	titleLabel.TextScaled = true
+	titleLabel.Font = Enum.Font.GothamBlack
+	titleLabel.ZIndex = 11
+	titleLabel.Parent = popup
 
-	local iconCorner = Instance.new("UICorner")
-	iconCorner.CornerRadius = UDim.new(0, 6)
-	iconCorner.Parent = iconLabel
+	-- 레터 + 보너스 행
+	local detailLabel = Instance.new("TextLabel")
+	detailLabel.Name = "Detail"
+	detailLabel.Size = UDim2.new(1, -16, 0.4, 0)
+	detailLabel.Position = UDim2.new(0, 8, 0.5, 2)
+	detailLabel.BackgroundTransparency = 1
+	detailLabel.Text = table.concat(mission.letters, "-") .. "  +" .. mission.bonus
+	detailLabel.TextColor3 = Color3.fromRGB(100, 220, 255)
+	detailLabel.TextScaled = true
+	detailLabel.Font = Enum.Font.GothamBold
+	detailLabel.ZIndex = 11
+	detailLabel.Parent = popup
 
-	-- 콤보 이름
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Name = "Name"
-	nameLabel.Size = UDim2.new(1, -58, 0.5, 0)
-	nameLabel.Position = UDim2.new(0, 54, 0, 4)
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Text = comboName
-	nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	nameLabel.TextScaled = true
-	nameLabel.Font = Enum.Font.GothamBlack
-	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-	nameLabel.ZIndex = 11
-	nameLabel.Parent = popup
-
-	-- 보너스
-	local bonusLabel = Instance.new("TextLabel")
-	bonusLabel.Name = "Bonus"
-	bonusLabel.Size = UDim2.new(1, -58, 0.4, 0)
-	bonusLabel.Position = UDim2.new(0, 54, 0.5, 2)
-	bonusLabel.BackgroundTransparency = 1
-	bonusLabel.Text = "+" .. bonus .. " BONUS"
-	bonusLabel.TextColor3 = Color3.fromRGB(255, 215, 50)
-	bonusLabel.TextScaled = true
-	bonusLabel.Font = Enum.Font.GothamBold
-	bonusLabel.TextXAlignment = Enum.TextXAlignment.Left
-	bonusLabel.ZIndex = 11
-	bonusLabel.Parent = popup
-
-	-- 스케일 업 애니메이션 (0 → 풀 사이즈)
+	-- 스케일 업
 	TweenService:Create(popup, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-		Size = UDim2.new(0, 220, 0, 60),
+		Size = UDim2.new(0, 240, 0, 60),
 	}):Play()
 
 	-- 글로우 펄스
 	task.spawn(function()
 		for _ = 1, 3 do
-			TweenService:Create(stroke, TweenInfo.new(0.3), {
-				Transparency = 0.6,
-			}):Play()
+			TweenService:Create(stroke, TweenInfo.new(0.3), { Transparency = 0.6 }):Play()
 			task.wait(0.3)
-			TweenService:Create(stroke, TweenInfo.new(0.3), {
-				Transparency = 0,
-			}):Play()
+			TweenService:Create(stroke, TweenInfo.new(0.3), { Transparency = 0 }):Play()
 			task.wait(0.3)
 		end
 	end)
 
-	-- 2초 후 페이드 아웃
+	-- 페이드 아웃
 	task.delay(1.8, function()
 		local fadeOut = TweenService:Create(popup, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-			Size = UDim2.new(0, 220, 0, 0),
+			Size = UDim2.new(0, 240, 0, 0),
 			BackgroundTransparency = 1,
 		})
 		TweenService:Create(stroke, TweenInfo.new(0.3), { Transparency = 1 }):Play()
-		TweenService:Create(nameLabel, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
-		TweenService:Create(bonusLabel, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
-		TweenService:Create(iconLabel, TweenInfo.new(0.3), { TextTransparency = 1, BackgroundTransparency = 1 }):Play()
+		TweenService:Create(titleLabel, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+		TweenService:Create(detailLabel, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
 		fadeOut:Play()
 		fadeOut.Completed:Wait()
 		popup:Destroy()
 	end)
 end
 
--- ===== 콤보 트래커 업데이트 =====
-function UIController:updateCombos(combos)
-	if not combos then return end
+-- ===== 새 미션 완료 팝업 처리 =====
+function UIController:showNewMissions(newMissions)
+	if not newMissions or #newMissions == 0 then return end
 
-	local playerCombos = combos.player or {}
-
-	-- 달성된 콤보 키 집계 (comboKey 기준)
-	local achievedKeys = {}
-	for _, c in playerCombos do
-		achievedKeys[c.comboKey] = true
-	end
-
-	-- 각 행 업데이트
-	for comboKey, rowData in self.elements.comboRows do
-		if achievedKeys[comboKey] then
-			if not rowData.achieved then
-				-- 새로 달성 → 하이라이트 애니메이션
-				rowData.achieved = true
-				TweenService:Create(rowData.label, TweenInfo.new(0.3), {
-					TextColor3 = Color3.fromRGB(255, 255, 255),
-				}):Play()
-				TweenService:Create(rowData.bonus, TweenInfo.new(0.3), {
-					TextColor3 = Color3.fromRGB(255, 215, 50),
-				}):Play()
-			end
-		else
-			rowData.achieved = false
-			rowData.label.TextColor3 = Color3.fromRGB(95, 95, 105)
-			rowData.bonus.TextColor3 = Color3.fromRGB(75, 75, 85)
-		end
-	end
-end
-
--- ===== 새 콤보 팝업 처리 =====
-function UIController:showNewCombos(newCombos)
-	if not newCombos or #newCombos == 0 then return end
-
-	-- 팝업을 약간의 딜레이로 순차 표시
-	for i, combo in newCombos do
+	for i, mission in newMissions do
 		task.delay((i - 1) * 0.5, function()
-			self:_showComboPopup(combo.name, combo.bonus, combo.icon)
+			self:_showMissionPopup(mission)
 		end)
 	end
 end
@@ -906,6 +959,45 @@ function UIController:showScorePopup(position: Vector3, points: number, team: st
 
 	task.delay(1.3, function()
 		popup:Destroy()
+	end)
+end
+
+-- ===== 타이밍 등급 팝업 (화면 중앙) =====
+function UIController:showTimingGrade(gradeName: string, gradeColor: Color3)
+	local label = Instance.new("TextLabel")
+	label.Name = "TimingGrade"
+	label.Size = UDim2.new(0, 0, 0, 0)
+	label.Position = UDim2.new(0.5, 0, 0.35, 0)
+	label.AnchorPoint = Vector2.new(0.5, 0.5)
+	label.BackgroundTransparency = 1
+	label.Text = gradeName
+	label.TextColor3 = gradeColor
+	label.Font = Enum.Font.GothamBlack
+	label.TextSize = 40
+	label.TextStrokeTransparency = 0.3
+	label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	label.TextTransparency = 0
+	label.ZIndex = 15
+	label.Parent = self.gui
+
+	-- 팝 애니메이션: 작은→큰 + 위로 떠오름
+	label.Size = UDim2.new(0, 300, 0, 60)
+	label.TextSize = 0
+
+	TweenService:Create(label, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		TextSize = 40,
+	}):Play()
+
+	-- 위로 떠오르며 페이드
+	task.delay(0.6, function()
+		TweenService:Create(label, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Position = UDim2.new(0.5, 0, 0.3, 0),
+			TextTransparency = 1,
+			TextStrokeTransparency = 1,
+		}):Play()
+		task.delay(0.5, function()
+			label:Destroy()
+		end)
 	end)
 end
 

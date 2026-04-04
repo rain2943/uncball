@@ -7,6 +7,32 @@ local NUM_GUIDE_DOTS = 20
 local GUIDE_DOT_SIZE = 0.22
 local PULLBACK_PX_FOR_MAX = 100 -- 조금만 당겨도 MAX (매우 민감)
 local SPIN_SENSITIVITY = 0.012 -- 좌우 조금만 움직여도 크게 꺾임
+local TIMING_DOT_SPEED = 28 -- 초당 이동 도트 수 (빠를수록 어려움)
+
+-- 타이밍 등급 (도트 중심(10.5)으로부터의 거리 기준)
+local TIMING_GRADES = {
+	{ maxDist = 1.0, name = "Perfect!", color = Color3.fromRGB(0, 255, 80), powerMult = 1.0, aimError = 0 },
+	{ maxDist = 3.0, name = "Great!", color = Color3.fromRGB(80, 220, 60), powerMult = 1.0, aimError = 0.5 },
+	{ maxDist = 5.5, name = "Good", color = Color3.fromRGB(255, 220, 40), powerMult = 0.97, aimError = 1.5 },
+	{ maxDist = 7.5, name = "Bad", color = Color3.fromRGB(255, 140, 30), powerMult = 0.92, aimError = 3.0 },
+	{ maxDist = 10, name = "Miss", color = Color3.fromRGB(255, 50, 40), powerMult = 0.8, aimError = 5.0 },
+}
+
+-- 도트별 색상 (중심=초록, 양끝=빨강)
+local function getTimingDotColor(dotIndex: number): Color3
+	local dist = math.abs(dotIndex - 10.5)
+	if dist <= 1.0 then
+		return Color3.fromRGB(0, 255, 80) -- 정중앙 초록
+	elseif dist <= 3.0 then
+		return Color3.fromRGB(80, 220, 60) -- 초록
+	elseif dist <= 5.5 then
+		return Color3.fromRGB(255, 220, 40) -- 노랑
+	elseif dist <= 7.5 then
+		return Color3.fromRGB(255, 140, 30) -- 주황
+	else
+		return Color3.fromRGB(255, 50, 40) -- 빨강
+	end
+end
 
 local LaunchController = {}
 LaunchController.__index = LaunchController
@@ -45,6 +71,11 @@ function LaunchController.new(remotes, uiController)
 	self.previewBall = nil
 	self.guideDots = {}
 	self.spawnY = Config.TABLE.HEIGHT + Config.TABLE.THICKNESS / 2 + Config.BALL.RADIUS + 0.2
+
+	-- 타이밍 커서
+	self.timingPos = 0 -- 0~(NUM_GUIDE_DOTS*2) 왕복 위치
+	self.timingDirection = 1 -- 1=전진, -1=후진
+	self.timingCursor = nil
 
 	self:_createPreview()
 	self:_setupInput()
@@ -88,6 +119,21 @@ function LaunchController:_createPreview()
 		dot.Parent = workspace
 		self.guideDots[i] = dot
 	end
+
+	-- 타이밍 커서 (하얀 빛나는 도트, 약간 큼)
+	local cursor = Instance.new("Part")
+	cursor.Name = "TimingCursor"
+	cursor.Shape = Enum.PartType.Ball
+	cursor.Size = Vector3.one * (GUIDE_DOT_SIZE * 2.2)
+	cursor.Material = Enum.Material.Neon
+	cursor.Color = Color3.fromRGB(255, 255, 255)
+	cursor.Transparency = 1
+	cursor.Anchored = true
+	cursor.CanCollide = false
+	cursor.CanQuery = false
+	cursor.CanTouch = false
+	cursor.Parent = workspace
+	self.timingCursor = cursor
 end
 
 function LaunchController:_showPreview(visible: boolean)
@@ -101,6 +147,9 @@ end
 function LaunchController:_hideGuide()
 	for _, dot in self.guideDots do
 		dot.Transparency = 1
+	end
+	if self.timingCursor then
+		self.timingCursor.Transparency = 1
 	end
 end
 
@@ -124,6 +173,8 @@ function LaunchController:_updateGuide()
 	-- 가이드 길이: 파워에 비례하되 짧게 (정밀 조정 가능하게)
 	local maxDist = self.power * 20 -- 0~20 studs (MAX에서 20)
 
+	local dotPositions = {}
+
 	for i, dot in self.guideDots do
 		local t_ratio = i / NUM_GUIDE_DOTS
 		local dist = maxDist * t_ratio
@@ -136,15 +187,30 @@ function LaunchController:_updateGuide()
 		local lateralOffset = 0.5 * lateralAccel * time * time
 
 		local pos = spawnPos + direction * dist + right * lateralOffset
-		dot.Position = Vector3.new(pos.X, self.spawnY - Config.BALL.RADIUS + 0.1, pos.Z)
+		local dotPos = Vector3.new(pos.X, self.spawnY - Config.BALL.RADIUS + 0.1, pos.Z)
+		dot.Position = dotPos
+		dotPositions[i] = dotPos
 
-		local colorT = t_ratio * self.power
-		dot.Color = Color3.fromRGB(
-			math.floor(80 + 175 * colorT),
-			math.floor(220 - 180 * colorT),
-			80
-		)
-		dot.Transparency = 0.15 + t_ratio * 0.5
+		-- 타이밍 구간 색상 (중심=초록, 양끝=빨강)
+		dot.Color = getTimingDotColor(i)
+		dot.Transparency = 0.25
+	end
+
+	-- 타이밍 커서 위치 업데이트
+	if self.timingCursor and #dotPositions > 0 then
+		local cursorIdx = math.clamp(math.floor(self.timingPos + 0.5), 1, NUM_GUIDE_DOTS)
+		self.timingCursor.Position = dotPositions[cursorIdx] + Vector3.new(0, 0.15, 0)
+		self.timingCursor.Transparency = 0
+
+		-- 커서가 올라탄 도트를 강조 (약간 키우기)
+		for i, dot in self.guideDots do
+			if i == cursorIdx then
+				dot.Size = Vector3.one * (GUIDE_DOT_SIZE * 1.5)
+				dot.Transparency = 0
+			else
+				dot.Size = Vector3.one * GUIDE_DOT_SIZE
+			end
+		end
 	end
 end
 
@@ -272,6 +338,9 @@ function LaunchController:_setupInput()
 				self.state = "AIMING"
 				-- AIMING 진입 시 현재 위치를 스핀 기준점으로 저장
 				self.aimStartPos = input.Position
+				-- 타이밍 커서 시작
+				self.timingPos = 1
+				self.timingDirection = 1
 			end
 			-- 세로: 파워 (스크린 Y 기준, 아래로 당길수록 강하게)
 			local pullback = math.max(dy - 30, 0)
@@ -303,16 +372,55 @@ end
 
 -- ===== 발사 =====
 
+function LaunchController:_evaluateTiming(): (string, Color3, number, number)
+	local cursorIdx = math.clamp(math.floor(self.timingPos + 0.5), 1, NUM_GUIDE_DOTS)
+	local dist = math.abs(cursorIdx - 10.5)
+	for _, grade in TIMING_GRADES do
+		if dist <= grade.maxDist then
+			return grade.name, grade.color, grade.powerMult, grade.aimError
+		end
+	end
+	local last = TIMING_GRADES[#TIMING_GRADES]
+	return last.name, last.color, last.powerMult, last.aimError
+end
+
 function LaunchController:_launch()
+	-- 타이밍 판정
+	local gradeName, gradeColor, powerMult, aimError = self:_evaluateTiming()
+
 	local finalPower = Config.LAUNCH.MIN_POWER + (Config.LAUNCH.MAX_POWER - Config.LAUNCH.MIN_POWER) * self.power
-	local direction = Vector3.new(0, 0, 1).Unit
+	finalPower = finalPower * powerMult
+
+	-- 타이밍에 따른 방향 오차
+	local dirX = 0
+	if aimError > 0 then
+		dirX = (math.random() - 0.5) * aimError
+	end
+	local direction = Vector3.new(dirX, 0, 1).Unit
 	local spawnX = self.spawnX
 
 	self:_showPreview(false)
 	self:_hideGuide()
 	self.state = "IDLE"
 
+	-- 타이밍 커서 리셋
+	self.timingPos = 1
+	self.timingDirection = 1
+
 	self.remotes.RequestLaunch:FireServer(direction, finalPower, self.spin, spawnX)
+
+	-- 발사 SFX (즉시 재생)
+	local launchSfx = Instance.new("Sound")
+	launchSfx.SoundId = "rbxassetid://121730291891328"
+	launchSfx.Volume = 0.5
+	launchSfx.Parent = workspace
+	launchSfx:Play()
+	launchSfx.Ended:Once(function() launchSfx:Destroy() end)
+
+	-- 타이밍 등급 팝업
+	if self.ui then
+		self.ui:showTimingGrade(gradeName, gradeColor)
+	end
 
 	self.power = 0
 	self.spin = 0
@@ -325,8 +433,8 @@ end
 -- ===== 매 프레임 업데이트 =====
 
 function LaunchController:_startUpdateLoop()
-	RunService.RenderStepped:Connect(function(_dt)
-		-- 에이밍 중: Q/E 스핀 + 가이드 업데이트
+	RunService.RenderStepped:Connect(function(dt)
+		-- 에이밍 중: Q/E 스핀 + 가이드 + 타이밍 커서 업데이트
 		if self.state == "AIMING" then
 			local spinDelta = 0
 			if self.spinKeys.left then spinDelta -= Config.SPIN.CHANGE_SPEED * 0.016 end
@@ -337,6 +445,16 @@ function LaunchController:_startUpdateLoop()
 
 			if self.ui then
 				self.ui:updateSpinIndicator(self.spin, self.power)
+			end
+
+			-- 타이밍 커서 왕복 이동
+			self.timingPos = self.timingPos + self.timingDirection * TIMING_DOT_SPEED * dt
+			if self.timingPos >= NUM_GUIDE_DOTS then
+				self.timingPos = NUM_GUIDE_DOTS
+				self.timingDirection = -1
+			elseif self.timingPos <= 1 then
+				self.timingPos = 1
+				self.timingDirection = 1
 			end
 
 			self:_updateGuide()

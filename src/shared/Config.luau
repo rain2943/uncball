@@ -120,17 +120,36 @@ Config.CAMERA = {
 	HOLD_TIME = 1.2,
 }
 
--- 콤보 시스템
-Config.COMBOS = {
-	PAIR = { name = "Pair", bonus = 2, icon = "2x", desc = "Same letter x2 in one zone" },
-	CROSS_PAIR = { name = "Cross Pair", bonus = 3, icon = "X2", desc = "Same letter in 2 zones" },
-	STRAIGHT = { name = "Straight", bonus = 5, icon = "ABC", desc = "A + B + C across zones" },
-	TRIPLE_MATCH = { name = "Triple Match", bonus = 8, icon = "3x", desc = "Same letter in all 3 zones" },
-	FULL_STRAIGHT = { name = "Full Straight", bonus = 10, icon = "ABCD", desc = "One of each A, B, C, D" },
-	FULL_HOUSE = { name = "Full House", bonus = 15, icon = "FH", desc = "Triple Match + Cross Pair" },
-	STAR_CLUSTER = { name = "Star Cluster", bonus = 25, icon = "★", desc = "A in all 3 zones + Grand Slam" },
+-- 미션 카드 시스템
+Config.MISSIONS = {
+	EASY_BONUS = 3,
+	MEDIUM_BONUS = 6,
+	HARD_BONUS = 10,
+	EASY_POOL = {
+		{ "A", "B" },
+		{ "B", "C" },
+		{ "A", "C" },
+		{ "C", "D" },
+		{ "B", "D" },
+		{ "A", "D" },
+	},
+	MEDIUM_POOL = {
+		{ "A", "B", "C" },
+		{ "B", "B", "A" },
+		{ "A", "C", "D" },
+		{ "B", "C", "C" },
+		{ "B", "B", "C" },
+		{ "A", "B", "B" },
+	},
+	HARD_POOL = {
+		{ "A", "B", "C", "D" },
+		{ "B", "B", "C", "A" },
+		{ "A", "B", "B", "C" },
+		{ "B", "C", "C", "A" },
+		{ "A", "A", "B", "C" },
+		{ "B", "B", "A", "D" },
+	},
 }
-Config.COMBO_ORDER = { "PAIR", "CROSS_PAIR", "STRAIGHT", "TRIPLE_MATCH", "FULL_STRAIGHT", "FULL_HOUSE", "STAR_CLUSTER" }
 
 -- RemoteEvent
 Config.REMOTES = {

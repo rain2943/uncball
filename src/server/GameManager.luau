@@ -36,9 +36,9 @@ function GameManager.new()
 	-- 슬롯에 안 들어간 공 (테이블 위에 남아있음, 후속타로 밀어넣기 가능)
 	self.looseBalls = {} -- { {ball=Part, team=string}, ... }
 
-	-- 콤보 상태
-	self.combos = { player = {}, ai = {} }
-	self.prevCombos = { player = {}, ai = {} }
+	-- 미션 카드 시스템
+	self.missions = {} -- { {letters={...}, bonus=N, claimedBy=nil|"player"|"ai", difficulty=1|2|3}, ... }
+	self.missionLetters = { player = {}, ai = {} } -- 각 팀이 모은 레터 카운트
 
 	return self
 end
@@ -84,8 +84,11 @@ function GameManager:startMatch(player)
 	for zoneNum = 1, 3 do
 		self.slotOwners[zoneNum] = {}
 	end
-	self.combos = { player = {}, ai = {} }
-	self.prevCombos = { player = {}, ai = {} }
+	self.missions = {}
+	self.missionLetters = { player = {}, ai = {} }
+
+	-- 미션 카드 생성
+	self:_generateMissions()
 
 	-- 플레이어 캐릭터를 테이블 끝에 배치
 	self:_positionPlayer(player)
@@ -94,6 +97,7 @@ function GameManager:startMatch(player)
 	self.remotes.MatchStart:FireClient(player, {
 		ballsPerPlayer = Config.GAME.BALLS_PER_PLAYER,
 		matchTime = Config.GAME.MATCH_TIME,
+		missions = self.missions,
 	})
 
 	self:_startPlayerTurn()
@@ -116,7 +120,7 @@ function GameManager:_startPlayerTurn()
 				self.remotes.BallLanded:FireClient(self.player, {
 					zone = nil, slot = nil, team = "player",
 					points = -1, position = nil,
-					scores = self.scores, combos = self.combos, newCombos = {},
+					scores = self.scores, missions = self.missions, newMissions = {},
 				})
 			end
 
@@ -165,11 +169,8 @@ function GameManager:_executeAITurn()
 	self.remotes.TurnChanged:FireClient(self.player, false, self.remainingBalls.ai)
 
 	task.spawn(function()
-		-- AI 결정
-		local direction, power, spin = self.ai:decide(self.slotOwners)
-
-		-- AI 발사 X 위치 (랜덤)
-		local aiSpawnX = (math.random() - 0.5) * Config.LAUNCH.SPAWN_X_RANGE * 1.2
+		-- AI 결정 (spawnX도 함께 반환)
+		local direction, power, spin, aiSpawnX = self.ai:decide(self.slotOwners)
 
 		-- AI "생각" 시간 — 카메라가 발사 뷰로 전환하는 시간
 		task.wait(0.8)
@@ -378,11 +379,18 @@ function GameManager:_waitForSettle(ball: Part, team: string)
 		local vel = ball.AssemblyLinearVelocity.Magnitude
 
 		if vel < 0.6 then
+			-- 0.8초 대기 후 재확인 (경사로 다시 미끄러질 수 있음)
 			task.wait(0.8)
 			if not ball or not ball.Parent then
 				self:_checkLooseBalls()
 				self:_onBallResult(nil, nil, team, nil)
 				return
+			end
+
+			-- 대기 후에도 여전히 움직이면 아직 settle 아님 → 루프 계속
+			local velAfter = ball.AssemblyLinearVelocity.Magnitude
+			if velAfter >= 0.6 then
+				continue
 			end
 
 			-- 슬롯 안착 체크
@@ -443,6 +451,7 @@ function GameManager:_checkLooseBalls()
 				-- 후속타로 슬롯에 들어감! 점수 재계산
 				print("[Uncball] Loose ball scored! team:", team, "zone:", zoneNum, "slot:", slotIdx)
 				self:_recalculateScores()
+				local newMissions = self:_checkMissions(team)
 				self:_broadcastState()
 
 				-- 점수 팝업
@@ -454,8 +463,9 @@ function GameManager:_checkLooseBalls()
 						points = Config.ZONES[zoneNum].BASE_POINTS,
 						position = ball.Position,
 						scores = self.scores,
-						combos = self.combos,
-						newCombos = {},
+						missions = self.missions,
+						newMissions = newMissions,
+						playerLetters = self:_collectLetters("player"),
 					})
 				end
 				continue -- 이 공은 안착됨, looseBalls에서 제거
@@ -525,17 +535,8 @@ function GameManager:_onBallResult(zoneNum, slotIdx, team, ball)
 	-- 점수 재계산
 	self:_recalculateScores()
 
-	-- 새로 달성한 콤보 감지
-	local newCombos = {}
-	local prevKeys = {}
-	for _, c in (self.prevCombos[team] or {}) do
-		prevKeys[c.key] = true
-	end
-	for _, c in (self.combos[team] or {}) do
-		if not prevKeys[c.key] then
-			table.insert(newCombos, c)
-		end
-	end
+	-- 미션 체크
+	local newMissions = self:_checkMissions(team)
 
 	-- 클라이언트에 결과 알림
 	if self.player then
@@ -550,8 +551,9 @@ function GameManager:_onBallResult(zoneNum, slotIdx, team, ball)
 			points = points,
 			position = ball and ball.Position or nil,
 			scores = self.scores,
-			combos = self.combos,
-			newCombos = newCombos,
+			missions = self.missions,
+			newMissions = newMissions,
+			playerLetters = self:_collectLetters("player"),
 		})
 	end
 
@@ -605,174 +607,94 @@ function GameManager:_nextTurn()
 	end
 end
 
-function GameManager:_calculateCombos(team: string): { { key: string, name: string, bonus: number, icon: string } }
-	-- Collect letters per zone and across all zones
-	local lettersPerZone: { [number]: { [string]: number } } = {}
-	local lettersAcrossZones: { [string]: { [number]: boolean } } = {}
+-- 미션 카드 생성 (매치 시작 시 호출)
+function GameManager:_generateMissions()
+	local missions = Config.MISSIONS
+	self.missions = {}
 
+	-- 각 풀에서 랜덤 1개씩 선택
+	local easyIdx = math.random(1, #missions.EASY_POOL)
+	local medIdx = math.random(1, #missions.MEDIUM_POOL)
+	local hardIdx = math.random(1, #missions.HARD_POOL)
+
+	table.insert(self.missions, {
+		letters = missions.EASY_POOL[easyIdx],
+		bonus = missions.EASY_BONUS,
+		difficulty = 1,
+		claimedBy = nil,
+	})
+	table.insert(self.missions, {
+		letters = missions.MEDIUM_POOL[medIdx],
+		bonus = missions.MEDIUM_BONUS,
+		difficulty = 2,
+		claimedBy = nil,
+	})
+	table.insert(self.missions, {
+		letters = missions.HARD_POOL[hardIdx],
+		bonus = missions.HARD_BONUS,
+		difficulty = 3,
+		claimedBy = nil,
+	})
+
+	print("[Uncball] Missions generated:", #self.missions)
+end
+
+-- 팀의 보유 레터 수집
+function GameManager:_collectLetters(team: string): { [string]: number }
+	local letters = {}
 	for zoneNum = 1, 3 do
-		lettersPerZone[zoneNum] = {}
 		local zoneConfig = Config.ZONES[zoneNum]
-		local slots = self.slotOwners[zoneNum]
 		for i = 1, zoneConfig.SLOTS do
-			if slots[i] == team then
+			if self.slotOwners[zoneNum][i] == team then
 				local letter = zoneConfig.LABELS[i]
-				lettersPerZone[zoneNum][letter] = (lettersPerZone[zoneNum][letter] or 0) + 1
-				if not lettersAcrossZones[letter] then
-					lettersAcrossZones[letter] = {}
-				end
-				lettersAcrossZones[letter][zoneNum] = true
+				letters[letter] = (letters[letter] or 0) + 1
 			end
 		end
 	end
+	return letters
+end
 
-	-- Count zones per letter
-	local zonesPerLetter: { [string]: number } = {}
-	for letter, zones in lettersAcrossZones do
-		local count = 0
-		for _ in zones do count += 1 end
-		zonesPerLetter[letter] = count
-	end
+-- 미션 달성 체크 (공 안착 후 호출, 새로 달성한 미션 배열 반환)
+function GameManager:_checkMissions(team: string): { { idx: number, letters: { string }, bonus: number, difficulty: number } }
+	local teamLetters = self:_collectLetters(team)
+	local newMissions = {}
 
-	-- Check for grand slams (needed for Star Cluster)
-	local hasGrandSlam = false
-	for zoneNum = 1, 3 do
-		local zoneConfig = Config.ZONES[zoneNum]
-		local allMine = true
-		for i = 1, zoneConfig.SLOTS do
-			if self.slotOwners[zoneNum][i] ~= team then
-				allMine = false
+	for idx, mission in self.missions do
+		if mission.claimedBy then continue end -- 이미 선점됨
+
+		-- 미션에 필요한 레터 카운트
+		local required = {}
+		for _, letter in mission.letters do
+			required[letter] = (required[letter] or 0) + 1
+		end
+
+		-- 보유 레터로 충족 가능한지 체크
+		local satisfied = true
+		for letter, count in required do
+			if (teamLetters[letter] or 0) < count then
+				satisfied = false
 				break
 			end
 		end
-		if allMine and self.slotOwners[zoneNum][1] == team then
-			hasGrandSlam = true
-			break
-		end
-	end
 
-	local achieved = {}
-	local hasTripleMatch = {} -- letters with triple match
-	local hasCrossPair = {} -- letters with cross pair
-
-	-- PAIR: same letter x2+ in one zone
-	for zoneNum = 1, 3 do
-		for letter, count in lettersPerZone[zoneNum] do
-			if count >= 2 then
-				local key = "PAIR_" .. letter .. "_Z" .. zoneNum
-				table.insert(achieved, {
-					key = key,
-					comboKey = "PAIR",
-					name = Config.COMBOS.PAIR.name,
-					bonus = Config.COMBOS.PAIR.bonus,
-					icon = Config.COMBOS.PAIR.icon,
-					detail = letter .. " x2 Z" .. zoneNum,
-				})
-			end
-		end
-	end
-
-	-- CROSS PAIR: same letter in 2+ different zones
-	for letter, zoneCount in zonesPerLetter do
-		if zoneCount >= 2 then
-			local key = "CROSS_PAIR_" .. letter
-			table.insert(achieved, {
-				key = key,
-				comboKey = "CROSS_PAIR",
-				name = Config.COMBOS.CROSS_PAIR.name,
-				bonus = Config.COMBOS.CROSS_PAIR.bonus,
-				icon = Config.COMBOS.CROSS_PAIR.icon,
-				detail = letter .. " x" .. zoneCount .. " zones",
+		if satisfied then
+			mission.claimedBy = team
+			table.insert(newMissions, {
+				idx = idx,
+				letters = mission.letters,
+				bonus = mission.bonus,
+				difficulty = mission.difficulty,
 			})
-			hasCrossPair[letter] = true
+			print("[Uncball] Mission claimed! idx:", idx, "team:", team, "bonus:", mission.bonus)
 		end
 	end
 
-	-- TRIPLE MATCH: same letter in all 3 zones
-	for letter, zoneCount in zonesPerLetter do
-		if zoneCount >= 3 then
-			local key = "TRIPLE_MATCH_" .. letter
-			table.insert(achieved, {
-				key = key,
-				comboKey = "TRIPLE_MATCH",
-				name = Config.COMBOS.TRIPLE_MATCH.name,
-				bonus = Config.COMBOS.TRIPLE_MATCH.bonus,
-				icon = Config.COMBOS.TRIPLE_MATCH.icon,
-				detail = letter .. " in all zones",
-			})
-			hasTripleMatch[letter] = true
-		end
+	-- 미션 보너스를 점수에 반영
+	if #newMissions > 0 then
+		self:_recalculateScores()
 	end
 
-	-- STRAIGHT: A + B + C
-	local hasA = zonesPerLetter["A"] and zonesPerLetter["A"] > 0
-	local hasB = zonesPerLetter["B"] and zonesPerLetter["B"] > 0
-	local hasC = zonesPerLetter["C"] and zonesPerLetter["C"] > 0
-	local hasD = zonesPerLetter["D"] and zonesPerLetter["D"] > 0
-
-	if hasA and hasB and hasC then
-		table.insert(achieved, {
-			key = "STRAIGHT",
-			comboKey = "STRAIGHT",
-			name = Config.COMBOS.STRAIGHT.name,
-			bonus = Config.COMBOS.STRAIGHT.bonus,
-			icon = Config.COMBOS.STRAIGHT.icon,
-			detail = "A-B-C",
-		})
-	end
-
-	-- FULL STRAIGHT: A + B + C + D
-	if hasA and hasB and hasC and hasD then
-		table.insert(achieved, {
-			key = "FULL_STRAIGHT",
-			comboKey = "FULL_STRAIGHT",
-			name = Config.COMBOS.FULL_STRAIGHT.name,
-			bonus = Config.COMBOS.FULL_STRAIGHT.bonus,
-			icon = Config.COMBOS.FULL_STRAIGHT.icon,
-			detail = "A-B-C-D",
-		})
-	end
-
-	-- FULL HOUSE: Triple Match + Cross Pair of different letter
-	local tripleLetters = {}
-	for letter in hasTripleMatch do
-		table.insert(tripleLetters, letter)
-	end
-	local crossPairLetters = {}
-	for letter in hasCrossPair do
-		table.insert(crossPairLetters, letter)
-	end
-
-	for _, tLetter in tripleLetters do
-		for _, cpLetter in crossPairLetters do
-			if cpLetter ~= tLetter then
-				table.insert(achieved, {
-					key = "FULL_HOUSE_" .. tLetter .. "_" .. cpLetter,
-					comboKey = "FULL_HOUSE",
-					name = Config.COMBOS.FULL_HOUSE.name,
-					bonus = Config.COMBOS.FULL_HOUSE.bonus,
-					icon = Config.COMBOS.FULL_HOUSE.icon,
-					detail = tLetter .. "x3 + " .. cpLetter .. "x2",
-				})
-				-- Only one Full House per triple letter
-				break
-			end
-		end
-	end
-
-	-- STAR CLUSTER: A in all 3 zones + any Grand Slam
-	if hasGrandSlam and zonesPerLetter["A"] and zonesPerLetter["A"] >= 3 then
-		table.insert(achieved, {
-			key = "STAR_CLUSTER",
-			comboKey = "STAR_CLUSTER",
-			name = Config.COMBOS.STAR_CLUSTER.name,
-			bonus = Config.COMBOS.STAR_CLUSTER.bonus,
-			icon = Config.COMBOS.STAR_CLUSTER.icon,
-			detail = "A x3 zones + GS",
-		})
-	end
-
-	return achieved
+	return newMissions
 end
 
 function GameManager:_recalculateScores()
@@ -814,15 +736,13 @@ function GameManager:_recalculateScores()
 			end
 		end
 
-		-- 콤보 보너스 계산
-		local combos = self:_calculateCombos(team)
-		for _, combo in combos do
-			total = total + combo.bonus
+		-- 미션 보너스 계산
+		for _, mission in self.missions do
+			if mission.claimedBy == team then
+				total = total + mission.bonus
+			end
 		end
 
-		-- 이전 콤보 저장 (새 콤보 감지용)
-		self.prevCombos[team] = self.combos[team]
-		self.combos[team] = combos
 		self.scores[team] = total
 	end
 	print("[Uncball] Scores recalculated:", "player:", self.scores.player, "ai:", self.scores.ai)
@@ -859,7 +779,8 @@ function GameManager:_broadcastState()
 		currentTurn = self.currentTurn,
 		timer = self.matchTimer,
 		state = self.state,
-		combos = self.combos,
+		missions = self.missions,
+		playerLetters = self:_collectLetters("player"),
 	})
 end
 
