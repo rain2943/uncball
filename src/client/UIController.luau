@@ -716,6 +716,7 @@ function UIController:updateScores(playerScore: number, aiScore: number)
 end
 
 function UIController:updateTimer(seconds: number)
+	seconds = math.max(seconds, 0)
 	local min = math.floor(seconds / 60)
 	local sec = seconds % 60
 	self.elements.timer.Text = string.format("%02d:%02d", min, sec)
@@ -999,6 +1000,10 @@ function UIController:showTimingGrade(gradeName: string, gradeColor: Color3)
 			label:Destroy()
 		end)
 	end)
+end
+
+function UIController:hideResult()
+	self.elements.resultFrame.Visible = false
 end
 
 function UIController:showMatchResult(winner: string, scores)

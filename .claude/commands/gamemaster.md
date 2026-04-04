@@ -14,9 +14,9 @@ You are the Game Master for **Uncball (Star Cluster Ball / 星罗球)**, a Roblo
 - 슬링샷 발사 (클릭→좌우 이동→뒤로 당기기=파워→좌우=스핀→릴리즈=발사)
 - 프리뷰 공 + 바닥 가이드 도트 (파워+스핀 반영, 물리 공식 일치)
 - 3D 공 모델 스핀 인디케이터 (ViewportFrame + 속도 표시)
-- AI 대전 (좌우 우회, 적당한 스핀, 거리 비례 파워)
+- AI 대전 (벽 근처 직진 발사, 존별 파워 프리셋, 스핀 커브)
 - 턴 시스템 (교대, 성공 시 추가 턴, 20초 제한)
-- 20초 타임아웃 = 턴 오버 + -1점 (최소 0)
+- 30초 타임아웃 = 공 소모 + 턴 넘김 (감점 없음)
 - 점수 계산 (기본점 + 연속 보너스 + 그랜드슬램 + 미션 보너스)
 - 미션 카드 레이스 시스템 (매치마다 3미션, 선점 경쟁)
 - 미션 UI 패널 (좌측, 레터 버블) + 완료 팝업 연출
@@ -32,10 +32,13 @@ You are the Game Master for **Uncball (Star Cluster Ball / 星罗球)**, a Roblo
 - 발사 뷰에서 카메라가 공 X 위치 따라감 (모바일 좌우 끝 지원)
 - BGM 재생 (rbxassetid://126841253996417, 루프, 볼륨 0.4)
 - 스핀 스크린 좌표 기준 (카메라 각도 무관)
+- SFX 4종 (발사, 충돌, 득점, 미션 완료)
+- 타이밍 인디케이터 (가이드 도트 위 왕복 커서, Perfect~Miss 5등급, 파워 비례 난이도)
+- 점수 팝업 실제 획득 점수 표시 (기본+연속+그랜드슬램 합산)
+- 매치 종료 후 5초 자동 재시작 (공 정리 → 새 매치)
 
 ### ❌ 미구현
 - PvP 매칭 / 로비
-- 사운드 이펙트 (효과음)
 - 보상/스킨 시스템
 - 레벨 디자인 변형
 
@@ -51,9 +54,9 @@ You are the Game Master for **Uncball (Star Cluster Ball / 星罗球)**, a Roblo
 
 | Zone | Z_OFFSET | Slots | Labels | Base Pts | Grand Slam |
 |------|----------|-------|--------|----------|------------|
-| 1 | -12 | 7 | D,C,B,A,B,C,D | 1 | +20 |
-| 2 | 6 | 5 | C,B,A,B,C | 2 | +30 |
-| 3 | 24 | 3 | B,A,B | 5 | +50 |
+| 1 | -12 | 7 | D,C,B,A,B,C,D | 1 | +3 |
+| 2 | 6 | 5 | C,B,A,B,C | 2 | +5 |
+| 3 | 24 | 3 | B,A,B | 5 | +9 |
 
 ### Tray Design
 - **반원 벽**: 10개 수평 스트립, 폭=2√(R²-d²), 높이=POST_HEIGHT, CanCollide=true
@@ -68,13 +71,13 @@ You are the Game Master for **Uncball (Star Cluster Ball / 星罗球)**, a Roblo
 - 플레이어 vs AI 교대
 - 공 8개씩
 - **성공 시 추가 턴** (슬롯 안착하면 같은 팀 다시 턴)
-- **20초 턴 제한** (타임아웃 = -1점, 공 소모, 턴 넘김)
+- **30초 턴 제한** (타임아웃 = 공 소모, 턴 넘김, 감점 없음)
 - 매치 타이머 180초
 
 ### Scoring
 - Base: 존 기본점수 (1/2/5)
 - Consecutive: {2:+1, 3:+3, 4:+6, 5:+10, 6:+15, 7:+21}
-- Grand Slam: Zone1+20, Zone2+30, Zone3+50
+- Grand Slam (트레이 전체 채움): Zone1+3, Zone2+5, Zone3+9
 - **Mission Card Race** (미션 카드 레이스):
   - 매치마다 3개 미션 생성 (쉬움/보통/어려움)
   - 레터 컬렉션 (순서 무관, 해당 레터를 모으면 달성)
@@ -112,11 +115,24 @@ You are the Game Master for **Uncball (Star Cluster Ball / 星罗球)**, a Roblo
 - SPIN: MAX_LATERAL_FORCE = 40, VectorForce 6초 지속
 - 스핀 이펙트: AngularVelocity + 나선형 Trail + 방향 ParticleEmitter
 
-### Guide Dots
+### Guide Dots + Timing Indicator
 - 20개, 바닥에 배치
 - 길이 = power × 20 studs
 - 커브 = 실제 물리 공식 (0.5 × lateralAccel × t²)
-- 색상 = 초록→빨강 그라디언트
+- 색상 = 타이밍 구간별 (중앙=초록, 양끝=빨강)
+- **하얀 커서 도트**: 도트 1↔20 왕복, 파워 비례 속도 (12~45/초)
+- **파워 비례 난이도**: 낮은 파워 → 초록 구간 2.5배 넓음, 높은 파워 → 기본 (좁음)
+- 에이밍 진입 시 시작, 릴리즈 시 판정
+
+### Timing Grades (릴리즈 시점 판정, 구간은 파워에 따라 스케일)
+
+| Grade | 기본 중심거리 | 파워배율 | 방향오차 |
+|-------|-------------|---------|---------|
+| Perfect! | ≤1 | 100% | 0 |
+| Great! | ≤3 | 100% | ±0.2 |
+| Good | ≤5.5 | 97% | ±1.5 |
+| Bad | ≤7.5 | 92% | ±3.0 |
+| Miss | >7.5 | 80% | ±5.0 |
 
 ### Spin Indicator (3D)
 - ViewportFrame에 회전하는 Marble 공
@@ -126,12 +142,11 @@ You are the Game Master for **Uncball (Star Cluster Ball / 星罗球)**, a Roblo
 ## AI System
 
 ### Strategy
-- 엣지에서 발사 (spawnX: ±6~9)
-- **왼쪽 발사 → 오른쪽 스핀, 오른쪽 발사 → 왼쪽 스핀**
-- 스핀 세기: 0.10~0.18 (적당하게)
-- 존별 파워 프리셋: Zone1=30, Zone2=38, Zone3=45
-- spawnX와 direction 연동 (타겟 직접 조준)
-- 스킬 기반 소폭 오차 (skill=0.65)
+- 벽 바로 옆에서 발사 (spawnX: ±8~9)
+- **완전 직진 발사** direction=(0,0,1), inwardLean 없음
+- **스핀으로만 커브**: -side × (0.05~0.08)
+- 존별 파워 프리셋 (감속 17.4 studs/s² 역산): Zone1=31, Zone2=40, Zone3=47
+- 소폭 오차: power ±0.7, spin ±0.007 (skill=0.65)
 
 ### Target Selection
 - 빈 슬롯만 후보
@@ -188,23 +203,26 @@ src/
 - TABLE: 90×25, HEIGHT=3
 - ZONES: Z=-12, 6, 24
 - BALL: RADIUS=0.5, DENSITY=3.5
-- GAME: 8 balls, 180s match, 20s turn, settle_timeout=10s
+- GAME: 8 balls, 180s match, 30s turn, settle_timeout=10s
 - LAUNCH: MIN=20, MAX=54, SPAWN_Z=-40, X_RANGE=9
 - SPIN: MAX_LATERAL_FORCE=40, CHANGE_SPEED=2.5
-- AI: SKILL=0.65, ZONE_PRESETS={Z1:30, Z2:38, Z3:45}
+- AI: SKILL=0.65, ZONE_PRESETS={Z1:31, Z2:40, Z3:47}
 - MISSIONS: EASY=+3(2글자), MEDIUM=+6(3글자), HARD=+10(4글자)
 - CAMERA: OVERVIEW=(0,55,-50), LAUNCH=(0,10,-52)
 
 ## Audio
 - **BGM**: rbxassetid://126841253996417 (매치 시작 시 재생, 루프, 볼륨 0.4)
-- **SFX**: 미구현 (발사, 충돌, 안착, 점수, 미션)
+- **SFX**:
+  - 발사: rbxassetid://121730291891328 (플레이어=LaunchController 즉시, AI=BallCreated)
+  - 충돌: rbxassetid://9113439845 (vel>0.8, 속도 비례 볼륨 0.2~1.0, 바닥 제외)
+  - 득점: rbxassetid://116574637578954 (슬롯 안착 시)
+  - 미션: rbxassetid://5711770745 (미션 선점 성공 시)
+  - 턴 시작: rbxassetid://127421479045055 (플레이어 턴 시작 시)
 
 ## Remaining Work
 1. PvP 매칭 / 로비
-2. 사운드 효과음 (발사, 충돌, 안착, 미션)
-3. 보상/스킨 시스템
-4. 레벨 디자인 변형
-5. 점수 팝업 연출 개선
-6. 모바일 터치 버튼 (스핀 등)
+2. 보상/스킨 시스템
+3. 레벨 디자인 변형
+4. 모바일 터치 버튼 (스핀 등)
 
 When the user asks you to work on any aspect of this game, reference these rules and design specs to ensure consistency.

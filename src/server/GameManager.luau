@@ -754,6 +754,10 @@ end
 function GameManager:_endMatch()
 	self.state = "MATCH_END"
 
+	-- 타이머 0으로 고정
+	self.matchTimer = 0
+	self:_broadcastState()
+
 	local winner
 	if self.scores.player > self.scores.ai then
 		winner = "player"
@@ -768,6 +772,40 @@ function GameManager:_endMatch()
 			winner = winner,
 			scores = self.scores,
 		})
+	end
+
+	-- 5초 후 자동 재시작
+	task.delay(5, function()
+		if self.player and self.player.Parent then
+			self:_cleanupBalls()
+			self:startMatch(self.player)
+		end
+	end)
+end
+
+function GameManager:_cleanupBalls()
+	-- 안착된 공 제거
+	for _, ball in self.settledBalls do
+		if ball and ball.Parent then
+			ball:Destroy()
+		end
+	end
+	self.settledBalls = {}
+
+	-- 미안착 공 제거
+	for _, entry in self.looseBalls do
+		if entry.ball and entry.ball.Parent then
+			entry.ball:Destroy()
+		end
+	end
+	self.looseBalls = {}
+
+	-- workspace에 남은 공 정리
+	for _, child in workspace:GetChildren() do
+		if child:IsA("Part") and child.Shape == Enum.PartType.Ball
+			and (child.Name == "PlayerBall" or child.Name == "AIBall") then
+			child:Destroy()
+		end
 	end
 end
 

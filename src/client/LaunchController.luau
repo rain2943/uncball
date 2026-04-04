@@ -7,27 +7,35 @@ local NUM_GUIDE_DOTS = 20
 local GUIDE_DOT_SIZE = 0.22
 local PULLBACK_PX_FOR_MAX = 100 -- 조금만 당겨도 MAX (매우 민감)
 local SPIN_SENSITIVITY = 0.012 -- 좌우 조금만 움직여도 크게 꺾임
-local TIMING_DOT_SPEED = 28 -- 초당 이동 도트 수 (빠를수록 어려움)
+local TIMING_SPEED_MIN = 12 -- 파워 0%일 때 속도
+local TIMING_SPEED_MAX = 45 -- 파워 100%일 때 속도
 
--- 타이밍 등급 (도트 중심(10.5)으로부터의 거리 기준)
-local TIMING_GRADES = {
+-- 타이밍 등급 기본값 (파워 100%일 때)
+local TIMING_GRADES_BASE = {
 	{ maxDist = 1.0, name = "Perfect!", color = Color3.fromRGB(0, 255, 80), powerMult = 1.0, aimError = 0 },
-	{ maxDist = 3.0, name = "Great!", color = Color3.fromRGB(80, 220, 60), powerMult = 1.0, aimError = 0.5 },
+	{ maxDist = 3.0, name = "Great!", color = Color3.fromRGB(80, 220, 60), powerMult = 1.0, aimError = 0.2 },
 	{ maxDist = 5.5, name = "Good", color = Color3.fromRGB(255, 220, 40), powerMult = 0.97, aimError = 1.5 },
 	{ maxDist = 7.5, name = "Bad", color = Color3.fromRGB(255, 140, 30), powerMult = 0.92, aimError = 3.0 },
 	{ maxDist = 10, name = "Miss", color = Color3.fromRGB(255, 50, 40), powerMult = 0.8, aimError = 5.0 },
 }
 
--- 도트별 색상 (중심=초록, 양끝=빨강)
-local function getTimingDotColor(dotIndex: number): Color3
+-- 파워에 따라 구간 확대 배율 계산 (낮을수록 초록 넓어짐)
+local function getTimingScale(power: number): number
+	-- power 0 → 2.5배 넓은 구간, power 1 → 1배 (기본)
+	return 1 + (1 - power) * 1.5
+end
+
+-- 도트별 색상 (파워 반영, 낮을수록 초록 구간 넓음)
+local function getTimingDotColor(dotIndex: number, power: number): Color3
 	local dist = math.abs(dotIndex - 10.5)
-	if dist <= 1.0 then
+	local scale = getTimingScale(power)
+	if dist <= 1.0 * scale then
 		return Color3.fromRGB(0, 255, 80) -- 정중앙 초록
-	elseif dist <= 3.0 then
+	elseif dist <= 3.0 * scale then
 		return Color3.fromRGB(80, 220, 60) -- 초록
-	elseif dist <= 5.5 then
+	elseif dist <= 5.5 * scale then
 		return Color3.fromRGB(255, 220, 40) -- 노랑
-	elseif dist <= 7.5 then
+	elseif dist <= 7.5 * scale then
 		return Color3.fromRGB(255, 140, 30) -- 주황
 	else
 		return Color3.fromRGB(255, 50, 40) -- 빨강
@@ -192,7 +200,7 @@ function LaunchController:_updateGuide()
 		dotPositions[i] = dotPos
 
 		-- 타이밍 구간 색상 (중심=초록, 양끝=빨강)
-		dot.Color = getTimingDotColor(i)
+		dot.Color = getTimingDotColor(i, self.power)
 		dot.Transparency = 0.25
 	end
 
@@ -375,12 +383,13 @@ end
 function LaunchController:_evaluateTiming(): (string, Color3, number, number)
 	local cursorIdx = math.clamp(math.floor(self.timingPos + 0.5), 1, NUM_GUIDE_DOTS)
 	local dist = math.abs(cursorIdx - 10.5)
-	for _, grade in TIMING_GRADES do
-		if dist <= grade.maxDist then
+	local scale = getTimingScale(self.power)
+	for _, grade in TIMING_GRADES_BASE do
+		if dist <= grade.maxDist * scale then
 			return grade.name, grade.color, grade.powerMult, grade.aimError
 		end
 	end
-	local last = TIMING_GRADES[#TIMING_GRADES]
+	local last = TIMING_GRADES_BASE[#TIMING_GRADES_BASE]
 	return last.name, last.color, last.powerMult, last.aimError
 end
 
@@ -447,8 +456,9 @@ function LaunchController:_startUpdateLoop()
 				self.ui:updateSpinIndicator(self.spin, self.power)
 			end
 
-			-- 타이밍 커서 왕복 이동
-			self.timingPos = self.timingPos + self.timingDirection * TIMING_DOT_SPEED * dt
+			-- 타이밍 커서 왕복 이동 (파워 비례 속도)
+			local timingSpeed = TIMING_SPEED_MIN + (TIMING_SPEED_MAX - TIMING_SPEED_MIN) * self.power
+			self.timingPos = self.timingPos + self.timingDirection * timingSpeed * dt
 			if self.timingPos >= NUM_GUIDE_DOTS then
 				self.timingPos = NUM_GUIDE_DOTS
 				self.timingDirection = -1

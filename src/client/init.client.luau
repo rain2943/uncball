@@ -81,6 +81,9 @@ end
 -- === 이벤트 핸들러 ===
 
 remoteEvents.MatchStart.OnClientEvent:Connect(function(data)
+	-- 이전 매치 결과 화면 숨기기
+	ui:hideResult()
+	ui:updateScores(0, 0)
 	ui:updateRemainingBalls(data.ballsPerPlayer, data.ballsPerPlayer)
 	ui:updateTimer(data.matchTime)
 

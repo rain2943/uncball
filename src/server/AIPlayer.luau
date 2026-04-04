@@ -4,11 +4,13 @@ local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Co
 local AIPlayer = {}
 AIPlayer.__index = AIPlayer
 
--- 존별 발사 프리셋 (경험적 최적값)
+-- 존별 발사 프리셋 (감속 ~17.4 studs/s² 기준 역산)
+-- power = sqrt(2 * 17.4 * distance)
+-- Zone1: d=28 → 31.2, Zone2: d=46 → 40.0, Zone3: d=64 → 47.2
 local ZONE_PRESETS = {
-	[1] = { power = 30, powerJitter = 2 },  -- Zone1: Z=-12, 거리 28 studs
-	[2] = { power = 38, powerJitter = 2 },  -- Zone2: Z=6, 거리 46 studs
-	[3] = { power = 45, powerJitter = 3 },  -- Zone3: Z=24, 거리 64 studs
+	[1] = { power = 31, powerJitter = 1.5 },
+	[2] = { power = 40, powerJitter = 1.5 },
+	[3] = { power = 47, powerJitter = 2 },
 }
 
 function AIPlayer.new(slotPositions: { [number]: { Vector3 } })
@@ -22,26 +24,24 @@ end
 function AIPlayer:decide(slotOwners: { [number]: { string? } }): (Vector3, number, number, number)
 	local targetZone, targetSlot = self:_pickTarget(slotOwners)
 
-	-- 좌우 끝에서 발사 (8~9, 항상 벽 근처)
+	-- 좌우 끝에서 발사 (플레이어와 동일한 전략)
 	local side = math.random() < 0.5 and -1 or 1
 	local spawnX = side * (8 + math.random())
 
-	-- 방향: 거의 직선 전방, 아주 살짝만 안쪽으로
-	-- side=1(오른쪽) → dx 살짝 마이너스(왼쪽으로), side=-1(왼쪽) → dx 살짝 플러스
-	local inwardLean = -side * (0.5 + math.random() * 1.0)
-	local direction = Vector3.new(inwardLean, 0, 1).Unit
+	-- 방향: 직진 (플레이어와 동일하게 X=0)
+	local direction = Vector3.new(0, 0, 1).Unit
 
-	-- 스핀: 안쪽으로 살짝 커브 (0.08~0.14)
-	local spin = -side * (0.08 + math.random() * 0.06)
+	-- 스핀: 안쪽으로 커브 (오른쪽발사→R스핀=-, 왼쪽발사→L스핀=+)
+	local spin = -side * (0.05 + math.random() * 0.03)
 
-	-- 파워: 존별 프리셋
+	-- 파워: 물리 역산 프리셋
 	local preset = ZONE_PRESETS[targetZone]
 	local power = preset.power + (math.random() - 0.5) * preset.powerJitter * 2
 
-	-- 소폭 오차
+	-- 소폭 오차 (스킬 기반)
 	local errorScale = 1 - self.skill
-	power = math.clamp(power + (math.random() - 0.5) * 3 * errorScale, Config.LAUNCH.MIN_POWER, Config.LAUNCH.MAX_POWER)
-	spin = math.clamp(spin + (math.random() - 0.5) * 0.04 * errorScale, -1, 1)
+	power = math.clamp(power + (math.random() - 0.5) * 2 * errorScale, Config.LAUNCH.MIN_POWER, Config.LAUNCH.MAX_POWER)
+	spin = math.clamp(spin + (math.random() - 0.5) * 0.02 * errorScale, -1, 1)
 	spawnX = math.clamp(spawnX, -Config.LAUNCH.SPAWN_X_RANGE, Config.LAUNCH.SPAWN_X_RANGE)
 
 	return direction, power, spin, spawnX
