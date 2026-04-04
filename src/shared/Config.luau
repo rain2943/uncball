@@ -35,7 +35,7 @@ Config.ZONES = {
 	},
 	[3] = {
 		SLOTS = 3,
-		Z_OFFSET = 18,
+		Z_OFFSET = 20,
 		RADIUS = 4,
 		BASE_POINTS = 5,
 		LABELS = { "B", "A", "B" },

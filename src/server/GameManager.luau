@@ -33,6 +33,8 @@ function GameManager.new()
 
 	-- 테이블에 안착된 공 파트 목록
 	self.settledBalls = {}
+	-- 슬롯에 안 들어간 공 (테이블 위에 남아있음, 후속타로 밀어넣기 가능)
+	self.looseBalls = {} -- { {ball=Part, team=string}, ... }
 
 	-- 콤보 상태
 	self.combos = { player = {}, ai = {} }
@@ -73,6 +75,7 @@ function GameManager:startMatch(player)
 	self.matchTimer = Config.GAME.MATCH_TIME
 	self.currentTurn = "player"
 	self.settledBalls = {}
+	self.looseBalls = {}
 
 	for zoneNum = 1, 3 do
 		self.slotOwners[zoneNum] = {}
@@ -329,73 +332,116 @@ end
 
 function GameManager:_waitForSettle(ball: Part, team: string)
 	local startTime = tick()
-	print("[Uncball] _waitForSettle start, team:", team)
 
 	while tick() - startTime < Config.GAME.BALL_SETTLE_TIMEOUT do
 		task.wait(0.15)
 
 		if not ball or not ball.Parent then
-			print("[Uncball] Ball gone (destroyed/fell)")
+			self:_checkLooseBalls() -- 다른 공도 체크
 			self:_onBallResult(nil, nil, team, nil)
 			return
 		end
 
+		-- 테이블 아래로 떨어진 경우만 삭제
 		if ball.Position.Y < Config.GAME.BALL_OUT_Y then
-			print("[Uncball] Ball fell off table")
 			ball:Destroy()
+			self:_checkLooseBalls()
 			self:_onBallResult(nil, nil, team, nil)
 			return
 		end
 
 		local vel = ball.AssemblyLinearVelocity.Magnitude
 
-		-- 공이 거의 멈추면 (vel < 0.6) 잠시 더 기다린 후 최종 판정
 		if vel < 0.6 then
-			-- 완전 정지 대기 (0.8초)
 			task.wait(0.8)
 			if not ball or not ball.Parent then
+				self:_checkLooseBalls()
 				self:_onBallResult(nil, nil, team, nil)
 				return
 			end
 
-			local finalVel = ball.AssemblyLinearVelocity.Magnitude
+			-- 슬롯 안착 체크
 			local zoneNum, slotIdx = self:_checkSlotLanding(ball)
-			print("[Uncball] Final settle - vel:", string.format("%.2f", finalVel), "zone:", tostring(zoneNum), "slot:", tostring(slotIdx), "pos:", ball.Position)
-
 			if zoneNum and self:_snapBallToSlot(ball, zoneNum, slotIdx, team) ~= false then
+				self:_checkLooseBalls() -- 충돌로 밀려난 다른 공도 체크
 				self:_onBallResult(zoneNum, slotIdx, team, ball)
 			else
-				-- 재시도
-				task.wait(1)
-				if ball and ball.Parent then
-					zoneNum, slotIdx = self:_checkSlotLanding(ball)
-					if zoneNum and self:_snapBallToSlot(ball, zoneNum, slotIdx, team) ~= false then
-						self:_onBallResult(zoneNum, slotIdx, team, ball)
-					else
-						ball:Destroy()
-						self:_onBallResult(nil, nil, team, nil)
-					end
-				else
-					self:_onBallResult(nil, nil, team, nil)
-				end
+				-- 슬롯에 안 들어갔지만 삭제하지 않음! 테이블에 남겨둠
+				table.insert(self.looseBalls, { ball = ball, team = team })
+				self:_checkLooseBalls()
+				self:_onBallResult(nil, nil, team, nil)
 			end
 			return
 		end
 	end
 
-	-- 타임아웃
-	print("[Uncball] Settle TIMEOUT")
+	-- 타임아웃: 슬롯 체크 후 남겨둠
 	if ball and ball.Parent then
 		local zoneNum, slotIdx = self:_checkSlotLanding(ball)
 		if zoneNum and self:_snapBallToSlot(ball, zoneNum, slotIdx, team) ~= false then
+			self:_checkLooseBalls()
 			self:_onBallResult(zoneNum, slotIdx, team, ball)
 		else
-			ball:Destroy()
+			table.insert(self.looseBalls, { ball = ball, team = team })
+			self:_checkLooseBalls()
 			self:_onBallResult(nil, nil, team, nil)
 		end
 	else
+		self:_checkLooseBalls()
 		self:_onBallResult(nil, nil, team, nil)
 	end
+end
+
+-- 테이블 위의 미안착 공들을 체크: 충돌로 슬롯에 들어갔을 수 있음
+function GameManager:_checkLooseBalls()
+	local remaining = {}
+
+	for _, entry in ipairs(self.looseBalls) do
+		local ball = entry.ball
+		local team = entry.team
+
+		if not ball or not ball.Parent then
+			continue -- 이미 사라진 공
+		end
+
+		-- 테이블 밖으로 떨어졌으면 삭제
+		if ball.Position.Y < Config.GAME.BALL_OUT_Y then
+			ball:Destroy()
+			continue
+		end
+
+		-- 멈춰있고 슬롯 근처면 안착 시도
+		local vel = ball.AssemblyLinearVelocity.Magnitude
+		if vel < 1.0 then
+			local zoneNum, slotIdx = self:_checkSlotLanding(ball)
+			if zoneNum and self:_snapBallToSlot(ball, zoneNum, slotIdx, team) ~= false then
+				-- 후속타로 슬롯에 들어감! 점수 재계산
+				print("[Uncball] Loose ball scored! team:", team, "zone:", zoneNum, "slot:", slotIdx)
+				self:_recalculateScores()
+				self:_broadcastState()
+
+				-- 점수 팝업
+				if self.player then
+					self.remotes.BallLanded:FireClient(self.player, {
+						zone = zoneNum,
+						slot = slotIdx,
+						team = team,
+						points = Config.ZONES[zoneNum].BASE_POINTS,
+						position = ball.Position,
+						scores = self.scores,
+						combos = self.combos,
+						newCombos = {},
+					})
+				end
+				continue -- 이 공은 안착됨, looseBalls에서 제거
+			end
+		end
+
+		-- 아직 슬롯 밖 → 남겨둠
+		table.insert(remaining, entry)
+	end
+
+	self.looseBalls = remaining
 end
 
 function GameManager:_checkSlotLanding(ball: Part): (number?, number?)
