@@ -45,6 +45,17 @@ launch.cameraController = camera
 remoteEvents.MatchStart.OnClientEvent:Connect(function(data)
 	ui:updateRemainingBalls(data.ballsPerPlayer, data.ballsPerPlayer)
 	ui:updateTimer(data.matchTime)
+
+	-- BGM 재생
+	if not workspace:FindFirstChild("BGM") then
+		local bgm = Instance.new("Sound")
+		bgm.Name = "BGM"
+		bgm.SoundId = "rbxassetid://126841253996417"
+		bgm.Volume = 0.4
+		bgm.Looped = true
+		bgm.Parent = workspace
+		bgm:Play()
+	end
 end)
 
 remoteEvents.TurnChanged.OnClientEvent:Connect(function(isPlayerTurn, _remainingBalls)
