@@ -20,27 +20,38 @@ function AIPlayer:decide(slotOwners: { [number]: { string? } }): (Vector3, numbe
 	local toTarget = targetPos - launchPos
 	local horizontalDist = Vector3.new(toTarget.X, 0, toTarget.Z).Magnitude
 
-	-- 파워: 거리 기반 + 약간의 여유 (트레이를 넘기지 않도록)
-	local powerRatio = horizontalDist / (Config.TABLE.LENGTH * 0.55)
-	local basePower = Config.LAUNCH.MIN_POWER + (Config.LAUNCH.MAX_POWER - Config.LAUNCH.MIN_POWER) * math.clamp(powerRatio, 0.2, 0.85)
-
 	local errorScale = 1 - self.skill
-	local powerError = (math.random() - 0.5) * 2 * Config.AI.POWER_ERROR_MAX * errorScale
-	local finalPower = math.clamp(basePower + powerError, Config.LAUNCH.MIN_POWER, Config.LAUNCH.MAX_POWER)
 
-	-- 스핀: 타겟 X위치에 비례 (좌우 타겟엔 스핀 활용)
-	local spinAmount = math.clamp(targetPos.X / 5, -1, 1) * self.skill
-	-- 랜덤 변동 추가
-	spinAmount = spinAmount + (math.random() - 0.5) * 0.3
-	spinAmount = math.clamp(spinAmount, -1, 1)
+	-- === 전략 선택: 직선 vs 좌우 우회 vs 스핀 커브 ===
+	local strategy = math.random()
+	local aimX, spin, basePower
 
-	-- 방향: 스핀을 감안해서 보정
-	-- 스핀이 오른쪽이면 살짝 왼쪽으로 쏴서 스핀으로 되돌아오게
-	local aimX = toTarget.X - spinAmount * 2
-	local aimError = (math.random() - 0.5) * 2 * Config.AI.AIM_ERROR_MAX * errorScale
+	if strategy < 0.5 then
+		-- 전략1: 좌측에서 크게 우회 진입
+		aimX = -6 - math.random() * 4 -- 왼쪽으로 크게
+		spin = 0.6 + math.random() * 0.4 -- 강한 오른쪽 스핀
+		basePower = 0.5 + math.random() * 0.3
+
+	else
+		-- 전략2: 우측에서 크게 우회 진입
+		aimX = 6 + math.random() * 4 -- 오른쪽으로 크게
+		spin = -(0.6 + math.random() * 0.4) -- 강한 왼쪽 스핀
+		basePower = 0.5 + math.random() * 0.3
+	end
+
+	-- 파워 계산
+	local power = Config.LAUNCH.MIN_POWER + (Config.LAUNCH.MAX_POWER - Config.LAUNCH.MIN_POWER) * math.clamp(basePower, 0.2, 0.85)
+	local powerError = (math.random() - 0.5) * Config.AI.POWER_ERROR_MAX * errorScale
+	power = math.clamp(power + powerError, Config.LAUNCH.MIN_POWER, Config.LAUNCH.MAX_POWER)
+
+	-- 에임 오차
+	local aimError = (math.random() - 0.5) * Config.AI.AIM_ERROR_MAX * errorScale
 	local direction = Vector3.new(aimX + aimError, 0, toTarget.Z).Unit
 
-	return direction, finalPower, spinAmount
+	-- 스핀 오차
+	spin = math.clamp(spin + (math.random() - 0.5) * 0.2 * errorScale, -1, 1)
+
+	return direction, power, spin
 end
 
 function AIPlayer:_pickTarget(slotOwners)
