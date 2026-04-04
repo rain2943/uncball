@@ -108,18 +108,16 @@ function GameManager:_startPlayerTurn()
 	self.remotes.TurnChanged:FireClient(self.player, true, self.remainingBalls.player)
 	self:_broadcastState()
 
-	-- 턴 제한시간 (10초 후 턴 오버 + -1점)
+	-- 턴 제한시간 (타임아웃 = 공 소모 + 턴 넘김)
 	self.turnTimer = task.delay(Config.GAME.TURN_TIME, function()
 		if self.state == "PLAYER_TURN" then
-			-- 시간 초과: -1점 (최소 0점)
-			self.scores.player = math.max(self.scores.player - 1, 0)
 			self.remainingBalls.player -= 1
 			self:_broadcastState()
 
 			if self.player then
 				self.remotes.BallLanded:FireClient(self.player, {
 					zone = nil, slot = nil, team = "player",
-					points = -1, position = nil,
+					points = 0, position = nil,
 					scores = self.scores, missions = self.missions, newMissions = {},
 				})
 			end
