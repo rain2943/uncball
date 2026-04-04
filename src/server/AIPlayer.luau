@@ -21,33 +21,27 @@ end
 -- AI가 발사 파라미터를 결정 (방향, 파워, 스핀, 발사X위치)
 function AIPlayer:decide(slotOwners: { [number]: { string? } }): (Vector3, number, number, number)
 	local targetZone, targetSlot = self:_pickTarget(slotOwners)
-	local targetPos = self.slotPositions[targetZone][targetSlot]
 
-	-- 좌우 중 하나 선택
+	-- 좌우 끝에서 발사 (8~9, 항상 벽 근처)
 	local side = math.random() < 0.5 and -1 or 1
+	local spawnX = side * (8 + math.random())
 
-	-- 발사 위치: 엣지 근처 (6~9)
-	local spawnX = side * (6 + math.random() * 3)
+	-- 방향: 거의 직선 전방, 아주 살짝만 안쪽으로
+	-- side=1(오른쪽) → dx 살짝 마이너스(왼쪽으로), side=-1(왼쪽) → dx 살짝 플러스
+	local inwardLean = -side * (0.5 + math.random() * 1.0)
+	local direction = Vector3.new(inwardLean, 0, 1).Unit
 
-	-- 스핀: 발사 반대 방향으로 커브 (0.10~0.18)
-	local spin = -side * (0.10 + math.random() * 0.08)
+	-- 스핀: 안쪽으로 살짝 커브 (0.08~0.14)
+	local spin = -side * (0.08 + math.random() * 0.06)
 
 	-- 파워: 존별 프리셋
 	local preset = ZONE_PRESETS[targetZone]
 	local power = preset.power + (math.random() - 0.5) * preset.powerJitter * 2
 
-	-- 방향: spawnX에서 타겟을 향해
-	local dx = targetPos.X - spawnX
-	local dz = targetPos.Z - Config.LAUNCH.SPAWN_Z
-
-	-- 스킬 기반 소폭 오차
+	-- 소폭 오차
 	local errorScale = 1 - self.skill
-	local aimError = (math.random() - 0.5) * 1.0 * errorScale
-	local direction = Vector3.new(dx + aimError, 0, dz).Unit
-
-	-- 파워/스핀 소폭 오차
-	power = math.clamp(power + (math.random() - 0.5) * 4 * errorScale, Config.LAUNCH.MIN_POWER, Config.LAUNCH.MAX_POWER)
-	spin = math.clamp(spin + (math.random() - 0.5) * 0.06 * errorScale, -1, 1)
+	power = math.clamp(power + (math.random() - 0.5) * 3 * errorScale, Config.LAUNCH.MIN_POWER, Config.LAUNCH.MAX_POWER)
+	spin = math.clamp(spin + (math.random() - 0.5) * 0.04 * errorScale, -1, 1)
 	spawnX = math.clamp(spawnX, -Config.LAUNCH.SPAWN_X_RANGE, Config.LAUNCH.SPAWN_X_RANGE)
 
 	return direction, power, spin, spawnX

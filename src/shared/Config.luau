@@ -21,7 +21,7 @@ Config.ZONES = {
 		RADIUS = 7,
 		BASE_POINTS = 1,
 		LABELS = { "D", "C", "B", "A", "B", "C", "D" },
-		GRAND_SLAM_BONUS = 20,
+		GRAND_SLAM_BONUS = 3,
 		COLOR = Color3.fromRGB(245, 242, 238),
 	},
 	[2] = {
@@ -30,7 +30,7 @@ Config.ZONES = {
 		RADIUS = 5.5,
 		BASE_POINTS = 2,
 		LABELS = { "C", "B", "A", "B", "C" },
-		GRAND_SLAM_BONUS = 30,
+		GRAND_SLAM_BONUS = 5,
 		COLOR = Color3.fromRGB(245, 242, 238),
 	},
 	[3] = {
@@ -39,7 +39,7 @@ Config.ZONES = {
 		RADIUS = 4,
 		BASE_POINTS = 5,
 		LABELS = { "B", "A", "B" },
-		GRAND_SLAM_BONUS = 50,
+		GRAND_SLAM_BONUS = 9,
 		COLOR = Color3.fromRGB(245, 242, 238),
 	},
 }

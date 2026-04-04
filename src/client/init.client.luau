@@ -106,6 +106,9 @@ remoteEvents.TurnChanged.OnClientEvent:Connect(function(isPlayerTurn, _remaining
 	launch:setEnabled(isPlayerTurn)
 	-- 플레이어/AI 모두 발사 뷰로 전환 (공 나가는 걸 볼 수 있게)
 	camera:enterLaunchView()
+	if isPlayerTurn then
+		playSound("rbxassetid://127421479045055", 0.5)
+	end
 end)
 
 remoteEvents.GameStateUpdate.OnClientEvent:Connect(function(data)
