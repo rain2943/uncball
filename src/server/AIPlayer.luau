@@ -16,43 +16,31 @@ function AIPlayer:decide(slotOwners: { [number]: { string? } }): (Vector3, numbe
 	local targetZone, targetSlot = self:_pickTarget(slotOwners)
 	local targetPos = self.slotPositions[targetZone][targetSlot]
 
-	-- 발사 위치에서 타겟까지
 	local launchPos = Vector3.new(0, Config.TABLE.HEIGHT + Config.LAUNCH.SPAWN_Y_OFFSET, Config.LAUNCH.SPAWN_Z)
 	local toTarget = targetPos - launchPos
 	local horizontalDist = Vector3.new(toTarget.X, 0, toTarget.Z).Magnitude
 
-	-- 파워 계산
-	local powerRatio = horizontalDist / (Config.TABLE.LENGTH * 0.65)
-	local basePower = Config.LAUNCH.MIN_POWER + (Config.LAUNCH.MAX_POWER - Config.LAUNCH.MIN_POWER) * math.clamp(powerRatio, 0, 1)
+	-- 파워: 거리 기반 + 약간의 여유 (트레이를 넘기지 않도록)
+	local powerRatio = horizontalDist / (Config.TABLE.LENGTH * 0.55)
+	local basePower = Config.LAUNCH.MIN_POWER + (Config.LAUNCH.MAX_POWER - Config.LAUNCH.MIN_POWER) * math.clamp(powerRatio, 0.2, 0.85)
 
-	-- 스킬 기반 오차
 	local errorScale = 1 - self.skill
-	local aimError = (math.random() - 0.5) * 2 * Config.AI.AIM_ERROR_MAX * errorScale
 	local powerError = (math.random() - 0.5) * 2 * Config.AI.POWER_ERROR_MAX * errorScale
 	local finalPower = math.clamp(basePower + powerError, Config.LAUNCH.MIN_POWER, Config.LAUNCH.MAX_POWER)
 
-	-- 방향
-	local direction = Vector3.new(toTarget.X + aimError, 0, toTarget.Z).Unit
+	-- 스핀: 타겟 X위치에 비례 (좌우 타겟엔 스핀 활용)
+	local spinAmount = math.clamp(targetPos.X / 5, -1, 1) * self.skill
+	-- 랜덤 변동 추가
+	spinAmount = spinAmount + (math.random() - 0.5) * 0.3
+	spinAmount = math.clamp(spinAmount, -1, 1)
 
-	-- 스핀 결정: 타겟이 좌우에 있으면 스핀으로 커브
-	local spin = 0
-	if targetPos.X > 2 then
-		-- 오른쪽 타겟 → 오른쪽 스핀
-		spin = math.random() * 0.6 * self.skill
-	elseif targetPos.X < -2 then
-		-- 왼쪽 타겟 → 왼쪽 스핀
-		spin = -math.random() * 0.6 * self.skill
-	else
-		-- 중앙 타겟 → 가끔 약한 스핀
-		spin = (math.random() - 0.5) * 0.3
-	end
+	-- 방향: 스핀을 감안해서 보정
+	-- 스핀이 오른쪽이면 살짝 왼쪽으로 쏴서 스핀으로 되돌아오게
+	local aimX = toTarget.X - spinAmount * 2
+	local aimError = (math.random() - 0.5) * 2 * Config.AI.AIM_ERROR_MAX * errorScale
+	local direction = Vector3.new(aimX + aimError, 0, toTarget.Z).Unit
 
-	-- 스킬 높으면 가끔 강한 스핀으로 트릭샷 시도
-	if self.skill > 0.5 and math.random() < 0.2 then
-		spin = (math.random() - 0.5) * 1.5
-	end
-
-	return direction, finalPower, math.clamp(spin, -1, 1)
+	return direction, finalPower, spinAmount
 end
 
 function AIPlayer:_pickTarget(slotOwners)

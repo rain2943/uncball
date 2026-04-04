@@ -194,27 +194,29 @@ function GameManager:_launchBall(ball: Part, direction: Vector3, power: number, 
 	-- 메인 임펄스
 	ball:ApplyImpulse(velocity * mass)
 
-	-- 스핀: 횡방향 힘 (시간에 따라 커브)
+	-- 스핀: 횡방향 지속 힘 (커브 궤적)
 	if math.abs(spin) > 0.05 then
-		local rightDir = Vector3.new(dir3.Z, 0, -dir3.X) -- 직교 방향
+		local rightDir = Vector3.new(dir3.Z, 0, -dir3.X)
 		local lateralForce = rightDir * spin * Config.SPIN.MAX_LATERAL_FORCE
 
-		local attachment = ball:FindFirstChildWhichIsA("Attachment")
-		if attachment then
-			local spinForce = Instance.new("VectorForce")
-			spinForce.Name = "SpinForce"
-			spinForce.Attachment0 = attachment
-			spinForce.Force = lateralForce
-			spinForce.RelativeTo = Enum.ActuatorRelativeTo.World
-			spinForce.Parent = ball
+		local spinAttachment = Instance.new("Attachment")
+		spinAttachment.Parent = ball
 
-			-- 3초 후 스핀 힘 제거
-			task.delay(3, function()
-				if spinForce and spinForce.Parent then
-					spinForce:Destroy()
-				end
-			end)
-		end
+		local spinForce = Instance.new("VectorForce")
+		spinForce.Name = "SpinForce"
+		spinForce.Attachment0 = spinAttachment
+		spinForce.Force = lateralForce
+		spinForce.RelativeTo = Enum.ActuatorRelativeTo.World
+		spinForce.Parent = ball
+
+		task.delay(3, function()
+			if spinForce and spinForce.Parent then
+				spinForce:Destroy()
+			end
+			if spinAttachment and spinAttachment.Parent then
+				spinAttachment:Destroy()
+			end
+		end)
 	end
 end
 

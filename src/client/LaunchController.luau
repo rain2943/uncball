@@ -93,12 +93,12 @@ function LaunchController:_updateGuide()
 	local angle = self.aimAngle * math.rad(40)
 	local direction = Vector3.new(math.sin(angle), 0, math.cos(angle)).Unit
 
-	-- 도트를 발사 방향 + 스핀 커브를 따라 배치
+	-- 스핀 = 포물선 커브 궤적
+	local right = Vector3.new(direction.Z, 0, -direction.X)
+
 	for i, dot in self.guideDots do
 		local dist = GUIDE_DOT_SPACING * i
-		-- 스핀에 따라 횡방향 오프셋 (포물선 커브)
-		local lateralOffset = self.spin * (dist * dist) * 0.02
-		local right = Vector3.new(direction.Z, 0, -direction.X) -- 직교 방향
+		local lateralOffset = self.spin * (dist * dist) * 0.06
 		local offset = direction * dist + right * lateralOffset
 		dot.Position = self.spawnPos + offset
 		dot.Transparency = 0.3 + (i / NUM_GUIDE_DOTS) * 0.5

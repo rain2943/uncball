@@ -89,7 +89,7 @@ Config.LAUNCH = {
 
 -- 스핀 시스템
 Config.SPIN = {
-	MAX_LATERAL_FORCE = 12, -- 최대 횡방향 임펄스
+	MAX_LATERAL_FORCE = 40, -- 최대 횡방향 힘
 	CHANGE_SPEED = 2.5, -- 초당 스핀 변화량
 }
 

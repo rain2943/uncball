@@ -9,7 +9,7 @@ local SLOT_GAP = BALL_DIAM + 0.15
 
 -- 사각 포스트(칸막이)
 local POST_WIDTH = 0.3
-local POST_HEIGHT = 1.6
+local POST_HEIGHT = 0.8
 local POST_DEPTH = 0.8
 local POST_COLOR = Color3.fromRGB(200, 195, 188)
 
@@ -129,7 +129,7 @@ function TableBuilder._buildTray(parent, zoneNum, zoneConfig, tableTop)
 		local lbl = Instance.new("Part")
 		lbl.Anchored = true; lbl.Transparency = 1; lbl.CanCollide = false
 		lbl.Size = Vector3.new(0.1, 0.1, 0.1)
-		lbl.Position = Vector3.new(slotX, tableTop + 0.3, postLineZ - 1)
+		lbl.Position = Vector3.new(slotX, tableTop + POST_HEIGHT + 0.5, postLineZ - 1)
 		lbl.Parent = parent
 
 		local bb = Instance.new("BillboardGui")
@@ -152,7 +152,7 @@ function TableBuilder._buildTray(parent, zoneNum, zoneConfig, tableTop)
 	local nl = Instance.new("Part")
 	nl.Anchored = true; nl.Transparency = 1; nl.CanCollide = false
 	nl.Size = Vector3.new(0.1, 0.1, 0.1)
-	nl.Position = Vector3.new(0, tableTop + 0.3, postLineZ - PLATE_RADIUS * 0.5)
+	nl.Position = Vector3.new(0, tableTop + POST_HEIGHT + 0.8, postLineZ - PLATE_RADIUS * 0.45)
 	nl.Parent = parent
 
 	local nbb = Instance.new("BillboardGui")
