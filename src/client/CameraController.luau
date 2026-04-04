@@ -46,9 +46,14 @@ end
 
 -- 플레이어 턴: 발사 뷰로 전환
 function CameraController:enterLaunchView()
-	-- 어떤 상태에서든 발사 뷰로 전환 가능
 	self.state = "LAUNCH_VIEW"
 	self.trackedBall = nil
+	self.launchFollowX = 0
+end
+
+-- 발사 뷰에서 공의 X 위치를 따라감
+function CameraController:setLaunchFollowX(x: number)
+	self.launchFollowX = x or 0
 end
 
 -- AI 턴 또는 추적 끝: 조감도로 복귀
@@ -72,7 +77,13 @@ function CameraController:_update(dt: number)
 		self.camera.CFrame = self.camera.CFrame:Lerp(self.overviewCF, math.min(dt * 3, 1))
 
 	elseif self.state == "LAUNCH_VIEW" then
-		self.camera.CFrame = self.camera.CFrame:Lerp(self.launchCF, math.min(dt * Config.CAMERA.LAUNCH_TRANSITION_SPEED, 1))
+		-- 공 X 위치를 따라감
+		local followX = self.launchFollowX or 0
+		local targetCF = CFrame.lookAt(
+			Config.CAMERA.LAUNCH_OFFSET + Vector3.new(followX * 0.7, 0, 0),
+			Config.CAMERA.LAUNCH_LOOK_AT + Vector3.new(followX * 0.5, 0, 0)
+		)
+		self.camera.CFrame = self.camera.CFrame:Lerp(targetCF, math.min(dt * Config.CAMERA.LAUNCH_TRANSITION_SPEED, 1))
 
 	elseif self.state == "LAUNCH_DELAY" then
 		-- 발사 직후 현재 뷰 잠시 유지

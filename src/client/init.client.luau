@@ -38,6 +38,7 @@ end
 local ui = UIController.new()
 local camera = CameraController.new()
 local launch = LaunchController.new(remoteEvents, ui)
+launch.cameraController = camera
 
 -- === 이벤트 핸들러 ===
 

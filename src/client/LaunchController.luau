@@ -28,6 +28,7 @@ function LaunchController.new(remotes, uiController)
 	local self = setmetatable({}, LaunchController)
 	self.remotes = remotes
 	self.ui = uiController
+	self.cameraController = nil -- init.client에서 설정
 
 	self.state = "IDLE"
 	self.power = 0
@@ -291,6 +292,10 @@ function LaunchController:_setupInput()
 			self.spawnX = math.clamp(worldPos.X, -xRange, xRange)
 			if self.previewBall then
 				self.previewBall.Position = self:_getSpawnPos()
+			end
+			-- 카메라도 따라감
+			if self.cameraController then
+				self.cameraController:setLaunchFollowX(self.spawnX)
 			end
 		end
 	end)
