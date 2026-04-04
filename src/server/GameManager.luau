@@ -126,11 +126,11 @@ function GameManager:_executeAITurn()
 		task.wait(thinkTime)
 
 		-- AI 결정
-		local direction, power = self.ai:decide(self.slotOwners)
+		local direction, power, spin = self.ai:decide(self.slotOwners)
 		self.remainingBalls.ai -= 1
 
 		local ball = self:_createBall("ai")
-		self:_launchBall(ball, direction, power)
+		self:_launchBall(ball, direction, power, spin)
 
 		self.remotes.BallCreated:FireClient(self.player, ball)
 
@@ -240,35 +240,37 @@ function GameManager:_waitForSettle(ball: Part, team: string)
 
 		local vel = ball.AssemblyLinearVelocity.Magnitude
 
-		-- 속도가 충분히 낮으면 안착 시도
-		if vel < 1.0 then
-			local zoneNum, slotIdx = self:_checkSlotLanding(ball)
-			print("[Uncball] Settle check - vel:", string.format("%.2f", vel), "zone:", tostring(zoneNum), "slot:", tostring(slotIdx), "pos:", ball.Position)
-
-			if zoneNum then
-				self:_snapBallToSlot(ball, zoneNum, slotIdx, team)
-				self:_onBallResult(zoneNum, slotIdx, team, ball)
+		-- 공이 거의 멈추면 (vel < 0.6) 잠시 더 기다린 후 최종 판정
+		if vel < 0.6 then
+			-- 완전 정지 대기 (0.8초)
+			task.wait(0.8)
+			if not ball or not ball.Parent then
+				self:_onBallResult(nil, nil, team, nil)
 				return
 			end
 
-			-- 속도가 매우 낮으면 (거의 정지) 슬롯 밖이라도 결과 처리
-			if vel < Config.GAME.BALL_SETTLE_VELOCITY then
-				task.wait(0.5)
+			local finalVel = ball.AssemblyLinearVelocity.Magnitude
+			local zoneNum, slotIdx = self:_checkSlotLanding(ball)
+			print("[Uncball] Final settle - vel:", string.format("%.2f", finalVel), "zone:", tostring(zoneNum), "slot:", tostring(slotIdx), "pos:", ball.Position)
+
+			if zoneNum and self:_snapBallToSlot(ball, zoneNum, slotIdx, team) ~= false then
+				self:_onBallResult(zoneNum, slotIdx, team, ball)
+			else
+				-- 재시도
+				task.wait(1)
 				if ball and ball.Parent then
 					zoneNum, slotIdx = self:_checkSlotLanding(ball)
-					if zoneNum then
-						self:_snapBallToSlot(ball, zoneNum, slotIdx, team)
+					if zoneNum and self:_snapBallToSlot(ball, zoneNum, slotIdx, team) ~= false then
 						self:_onBallResult(zoneNum, slotIdx, team, ball)
 					else
-						print("[Uncball] Ball stopped outside slots, destroying")
 						ball:Destroy()
 						self:_onBallResult(nil, nil, team, nil)
 					end
 				else
 					self:_onBallResult(nil, nil, team, nil)
 				end
-				return
 			end
+			return
 		end
 	end
 
@@ -276,8 +278,7 @@ function GameManager:_waitForSettle(ball: Part, team: string)
 	print("[Uncball] Settle TIMEOUT")
 	if ball and ball.Parent then
 		local zoneNum, slotIdx = self:_checkSlotLanding(ball)
-		if zoneNum then
-			self:_snapBallToSlot(ball, zoneNum, slotIdx, team)
+		if zoneNum and self:_snapBallToSlot(ball, zoneNum, slotIdx, team) ~= false then
 			self:_onBallResult(zoneNum, slotIdx, team, ball)
 		else
 			ball:Destroy()
@@ -295,6 +296,11 @@ function GameManager:_checkSlotLanding(ball: Part): (number?, number?)
 
 	for zoneNum = 1, 3 do
 		for slotIdx, slotPos in TableBuilder.slotPositions[zoneNum] do
+			-- 이미 점유된 슬롯은 건너뛰기
+			if self.slotOwners[zoneNum][slotIdx] then
+				continue
+			end
+
 			local dist = (Vector3.new(ballPos.X, 0, ballPos.Z) - Vector3.new(slotPos.X, 0, slotPos.Z)).Magnitude
 			if dist < bestDist then
 				bestDist = dist
@@ -304,51 +310,31 @@ function GameManager:_checkSlotLanding(ball: Part): (number?, number?)
 		end
 	end
 
-	if not bestZone then
-		-- 가장 가까운 슬롯과의 거리 출력
-		local closestDist = math.huge
-		for zoneNum = 1, 3 do
-			for slotIdx, slotPos in TableBuilder.slotPositions[zoneNum] do
-				local dist = (Vector3.new(ballPos.X, 0, ballPos.Z) - Vector3.new(slotPos.X, 0, slotPos.Z)).Magnitude
-				if dist < closestDist then
-					closestDist = dist
-				end
-			end
-		end
-		print("[Uncball] No slot found. Ball:", ballPos, "Closest slot dist:", string.format("%.2f", closestDist), "Detect radius:", Config.SLOT.DETECT_RADIUS)
-	end
-
 	return bestZone, bestSlot
 end
 
 function GameManager:_snapBallToSlot(ball: Part, zoneNum: number, slotIdx: number, team: string)
-	-- 이미 점유된 슬롯이면 기존 공 밀어내기
-	local existingOwner = self.slotOwners[zoneNum][slotIdx]
-	if existingOwner then
-		-- 기존 공 제거
-		local key = zoneNum .. "_" .. slotIdx
-		if self.settledBalls[key] then
-			self.settledBalls[key]:Destroy()
-			self.settledBalls[key] = nil
-		end
+	-- 이미 점유된 슬롯이면 진입 불가 (false 반환)
+	if self.slotOwners[zoneNum][slotIdx] then
+		print("[Uncball] Slot already occupied! zone:", zoneNum, "slot:", slotIdx)
+		return false
 	end
 
 	-- 슬롯 소유권 설정
 	self.slotOwners[zoneNum][slotIdx] = team
+	print("[Uncball] Slot claimed! zone:", zoneNum, "slot:", slotIdx, "team:", team)
 
-	-- 공을 슬롯 중심으로 스냅
-	local slotPos = TableBuilder.slotPositions[zoneNum][slotIdx]
-	local snapY = slotPos.Y + Config.BALL.RADIUS
-
-	ball.Anchored = true
-	ball.Position = Vector3.new(slotPos.X, snapY, slotPos.Z)
+	-- 물리적으로 멈춘 위치 그대로 고정 (스냅 없음 = 자연스러운 위치)
 	ball.AssemblyLinearVelocity = Vector3.zero
 	ball.AssemblyAngularVelocity = Vector3.zero
+	ball.Anchored = true
+	ball.CanCollide = true
 
-	-- InclineForce 제거 (이미 안착)
-	local force = ball:FindFirstChild("InclineForce")
-	if force then
-		force:Destroy()
+	-- 힘 제거
+	for _, child in ball:GetChildren() do
+		if child:IsA("VectorForce") or child:IsA("Attachment") then
+			child:Destroy()
+		end
 	end
 
 	local key = zoneNum .. "_" .. slotIdx
@@ -419,7 +405,7 @@ function GameManager:_recalculateScores()
 	self.scores.player = 0
 	self.scores.ai = 0
 
-	for _, team in { "player", "ai" } do
+	for _, team in ipairs({ "player", "ai" }) do
 		local total = 0
 		for zoneNum = 1, 3 do
 			local zoneConfig = Config.ZONES[zoneNum]
@@ -456,6 +442,7 @@ function GameManager:_recalculateScores()
 
 		self.scores[team] = total
 	end
+	print("[Uncball] Scores recalculated:", "player:", self.scores.player, "ai:", self.scores.ai)
 end
 
 function GameManager:_endMatch()

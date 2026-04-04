@@ -25,7 +25,7 @@ Config.PIN = {
 Config.ZONES = {
 	[1] = {
 		SLOTS = 7,
-		Z_OFFSET = 2,
+		Z_OFFSET = -5,
 		RADIUS = 7,
 		BASE_POINTS = 1,
 		LABELS = { "D", "C", "B", "A", "B", "C", "D" },
@@ -34,7 +34,7 @@ Config.ZONES = {
 	},
 	[2] = {
 		SLOTS = 5,
-		Z_OFFSET = 13,
+		Z_OFFSET = 5,
 		RADIUS = 5.5,
 		BASE_POINTS = 2,
 		LABELS = { "C", "B", "A", "B", "C" },
@@ -43,7 +43,7 @@ Config.ZONES = {
 	},
 	[3] = {
 		SLOTS = 3,
-		Z_OFFSET = 22,
+		Z_OFFSET = 15,
 		RADIUS = 4,
 		BASE_POINTS = 5,
 		LABELS = { "B", "A", "B" },
@@ -54,7 +54,7 @@ Config.ZONES = {
 
 -- 슬롯 (핀 사이 간격 — 공이 안착하는 곳)
 Config.SLOT = {
-	DETECT_RADIUS = 2.0,
+	DETECT_RADIUS = 1.0,
 }
 
 -- 공
@@ -74,8 +74,8 @@ Config.GAME = {
 	BALLS_PER_PLAYER = 8,
 	MATCH_TIME = 180,
 	BALL_SETTLE_VELOCITY = 0.4,
-	BALL_SETTLE_TIMEOUT = 5,
-	BALL_OUT_Y = 0,
+	BALL_SETTLE_TIMEOUT = 10,
+	BALL_OUT_Y = -5,
 	CONSECUTIVE_BONUS = { [2] = 1, [3] = 3, [4] = 6, [5] = 10, [6] = 15, [7] = 21 },
 }
 
