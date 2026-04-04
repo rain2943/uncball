@@ -22,25 +22,22 @@ function AIPlayer:decide(slotOwners: { [number]: { string? } }): (Vector3, numbe
 
 	local errorScale = 1 - self.skill
 
-	-- === 전략 선택: 직선 vs 좌우 우회 vs 스핀 커브 ===
-	local strategy = math.random()
-	local aimX, spin, basePower
+	-- 발사 전략: 좌우에서 약간 벗어나서 적절한 스핀으로 커브
+	local side = math.random() < 0.5 and -1 or 1
 
-	if strategy < 0.5 then
-		-- 전략1: 좌측에서 크게 우회 진입
-		aimX = -6 - math.random() * 4 -- 왼쪽으로 크게
-		spin = 0.6 + math.random() * 0.4 -- 강한 오른쪽 스핀
-		basePower = 0.5 + math.random() * 0.3
+	-- 발사 위치: 중심에서 2~5 벗어남 (과하지 않게)
+	local aimX = side * (2 + math.random() * 3)
 
-	else
-		-- 전략2: 우측에서 크게 우회 진입
-		aimX = 6 + math.random() * 4 -- 오른쪽으로 크게
-		spin = -(0.6 + math.random() * 0.4) -- 강한 왼쪽 스핀
-		basePower = 0.5 + math.random() * 0.3
-	end
+	-- 스핀: 발사 위치 반대 방향으로 (왼쪽에서 쏘면 오른쪽 스핀)
+	-- side=-1(왼쪽발사) → spin 양수(오른쪽커브)
+	-- side=+1(오른쪽발사) → spin 음수(왼쪽커브)
+	local spin = -side * (0.15 + math.random() * 0.25) -- 적당한 세기 (0.15~0.4)
+
+	-- 파워: 타겟 존 거리 비례
+	local basePower = math.clamp(horizontalDist / (Config.TABLE.LENGTH * 0.45), 0.3, 0.75)
 
 	-- 파워 계산
-	local power = Config.LAUNCH.MIN_POWER + (Config.LAUNCH.MAX_POWER - Config.LAUNCH.MIN_POWER) * math.clamp(basePower, 0.2, 0.85)
+	local power = Config.LAUNCH.MIN_POWER + (Config.LAUNCH.MAX_POWER - Config.LAUNCH.MIN_POWER) * basePower
 	local powerError = (math.random() - 0.5) * Config.AI.POWER_ERROR_MAX * errorScale
 	power = math.clamp(power + powerError, Config.LAUNCH.MIN_POWER, Config.LAUNCH.MAX_POWER)
 

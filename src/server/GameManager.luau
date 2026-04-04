@@ -52,10 +52,14 @@ function GameManager:init(remotes)
 	-- AI 초기화
 	self.ai = AIPlayer.new(TableBuilder.slotPositions)
 
-	-- 타이머 루프
+	-- 타이머 + looseBall 체크 루프
 	task.spawn(function()
 		while true do
 			task.wait(1)
+			-- 주기적으로 미안착 공 체크
+			if #self.looseBalls > 0 then
+				self:_checkLooseBalls()
+			end
 			if self.state ~= "IDLE" and self.state ~= "MATCH_END" then
 				self.matchTimer = self.matchTimer - 1
 				if self.matchTimer <= 0 then
@@ -100,13 +104,24 @@ function GameManager:_startPlayerTurn()
 	self.remotes.TurnChanged:FireClient(self.player, true, self.remainingBalls.player)
 	self:_broadcastState()
 
-	-- 턴 제한시간 (10초 후 자동 발사)
+	-- 턴 제한시간 (10초 후 턴 오버 + -1점)
 	self.turnTimer = task.delay(Config.GAME.TURN_TIME, function()
 		if self.state == "PLAYER_TURN" then
-			-- 시간 초과: 랜덤 발사
-			local dir = Vector3.new((math.random() - 0.5) * 0.5, 0, 1).Unit
-			local power = Config.LAUNCH.MIN_POWER + math.random() * 20
-			self:handleLaunch(self.player, dir, power, 0, 0)
+			-- 시간 초과: -1점 (최소 0점)
+			self.scores.player = math.max(self.scores.player - 1, 0)
+			self.remainingBalls.player -= 1
+			self:_broadcastState()
+
+			if self.player then
+				self.remotes.BallLanded:FireClient(self.player, {
+					zone = nil, slot = nil, team = "player",
+					points = -1, position = nil,
+					scores = self.scores, combos = self.combos, newCombos = {},
+				})
+			end
+
+			task.wait(0.5)
+			self:_nextTurn()
 		end
 	end)
 end
@@ -150,15 +165,25 @@ function GameManager:_executeAITurn()
 	self.remotes.TurnChanged:FireClient(self.player, false, self.remainingBalls.ai)
 
 	task.spawn(function()
-		-- AI 생각 시간
-		local thinkTime = self.ai:getThinkTime()
-		task.wait(thinkTime)
-
 		-- AI 결정
 		local direction, power, spin = self.ai:decide(self.slotOwners)
-		self.remainingBalls.ai -= 1
 
-		local ball = self:_createBall("ai")
+		-- AI 발사 X 위치 (랜덤)
+		local aiSpawnX = (math.random() - 0.5) * Config.LAUNCH.SPAWN_X_RANGE * 1.2
+
+		-- AI "생각" 시간 — 카메라가 발사 뷰로 전환하는 시간
+		task.wait(0.8)
+
+		-- AI 공 미리보기 위치 알림 (클라이언트에서 카메라 이동용)
+		if self.player then
+			self.remotes.TurnChanged:FireClient(self.player, false, self.remainingBalls.ai)
+		end
+
+		-- AI가 위치 고르는 연출 (잠시 대기)
+		task.wait(1.0)
+
+		self.remainingBalls.ai -= 1
+		local ball = self:_createBall("ai", aiSpawnX)
 		self:_launchBall(ball, direction, power, spin)
 
 		self.remotes.BallCreated:FireClient(self.player, ball)
@@ -532,8 +557,20 @@ function GameManager:_onBallResult(zoneNum, slotIdx, team, ball)
 
 	self:_broadcastState()
 
-	-- 다음 턴
+	-- 슬롯 안착 성공 → 추가 턴!
 	task.wait(1)
+	if zoneNum and team == self.currentTurn then
+		-- 같은 팀 추가 턴 (공이 남아있으면)
+		local remaining = team == "player" and self.remainingBalls.player or self.remainingBalls.ai
+		if remaining > 0 then
+			if team == "player" then
+				self:_startPlayerTurn()
+			else
+				self:_executeAITurn()
+			end
+			return
+		end
+	end
 	self:_nextTurn()
 end
 

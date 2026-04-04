@@ -49,6 +49,8 @@ end)
 remoteEvents.TurnChanged.OnClientEvent:Connect(function(isPlayerTurn, _remainingBalls)
 	ui:setTurn(isPlayerTurn)
 	launch:setEnabled(isPlayerTurn)
+	-- 플레이어/AI 모두 발사 뷰로 전환 (공 나가는 걸 볼 수 있게)
+	camera:enterLaunchView()
 end)
 
 remoteEvents.GameStateUpdate.OnClientEvent:Connect(function(data)

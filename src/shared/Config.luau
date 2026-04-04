@@ -1,9 +1,9 @@
 local Config = {}
 
--- 테이블 물리적 구조
+-- 테이블
 Config.TABLE = {
-	WIDTH = 20,
-	LENGTH = 70, -- 55→70 (트레이 간격 확보)
+	WIDTH = 25,
+	LENGTH = 90,
 	THICKNESS = 1,
 	HEIGHT = 3,
 	WALL_HEIGHT = 3,
@@ -13,11 +13,11 @@ Config.TABLE = {
 	MATERIAL = Enum.Material.SmoothPlastic,
 }
 
--- 점수 구역 (간격 넓힘)
+-- 점수 구역
 Config.ZONES = {
 	[1] = {
 		SLOTS = 7,
-		Z_OFFSET = -8,
+		Z_OFFSET = -12,
 		RADIUS = 7,
 		BASE_POINTS = 1,
 		LABELS = { "D", "C", "B", "A", "B", "C", "D" },
@@ -35,7 +35,7 @@ Config.ZONES = {
 	},
 	[3] = {
 		SLOTS = 3,
-		Z_OFFSET = 20,
+		Z_OFFSET = 24,
 		RADIUS = 4,
 		BASE_POINTS = 5,
 		LABELS = { "B", "A", "B" },
@@ -65,44 +65,53 @@ Config.BALL = {
 Config.GAME = {
 	BALLS_PER_PLAYER = 8,
 	MATCH_TIME = 180,
-	TURN_TIME = 10, -- 턴 제한시간
+	TURN_TIME = 20,
 	BALL_SETTLE_VELOCITY = 0.4,
 	BALL_SETTLE_TIMEOUT = 10,
 	BALL_OUT_Y = -5,
 	CONSECUTIVE_BONUS = { [2] = 1, [3] = 3, [4] = 6, [5] = 10, [6] = 15, [7] = 21 },
 }
 
--- 발사 시스템
+-- 발사 (플릭 방식)
 Config.LAUNCH = {
-	MIN_POWER = 18,
-	MAX_POWER = 75,
-	SPAWN_Z = -30, -- 더 뒤로
+	MIN_POWER = 20,
+	MAX_POWER = 54,
+	SPAWN_Z = -40,
 	SPAWN_Y_OFFSET = 1.5,
-	SPAWN_X_RANGE = 7, -- 좌우 이동 범위
+	SPAWN_X_RANGE = 9,
+	FLICK_MIN_SPEED = 80, -- 최소 마우스 속도 (px/s) — 이하면 취소
+	FLICK_MAX_SPEED = 1200, -- 이 속도에서 MAX_POWER
+	VELOCITY_SAMPLES = 10, -- 속도 계산용 샘플 수 (많을수록 안정적)
 }
 
--- 스핀 시스템
+-- 스핀
 Config.SPIN = {
 	MAX_LATERAL_FORCE = 40,
 	CHANGE_SPEED = 2.5,
 }
 
--- 경사 시뮬레이션
+-- 경사
 Config.INCLINE_FORCE = 8
 
--- AI 설정
+-- AI
 Config.AI = {
 	SKILL = 0.65,
 	THINK_TIME_MIN = 1.2,
 	THINK_TIME_MAX = 2.8,
-	AIM_ERROR_MAX = 2.5,
-	POWER_ERROR_MAX = 8,
+	AIM_ERROR_MAX = 3.0,
+	POWER_ERROR_MAX = 10,
 }
 
 -- 카메라
 Config.CAMERA = {
-	DEFAULT_OFFSET = Vector3.new(0, 50, -48),
-	DEFAULT_LOOK_AT = Vector3.new(0, 3, 3),
+	-- 전체 조감도 (AI 턴, 턴 사이)
+	OVERVIEW_OFFSET = Vector3.new(0, 55, -50),
+	OVERVIEW_LOOK_AT = Vector3.new(0, 3, 5),
+	-- 발사 뷰 (플레이어 턴, 낮은 각도)
+	LAUNCH_OFFSET = Vector3.new(0, 10, -52),
+	LAUNCH_LOOK_AT = Vector3.new(0, 4, 10),
+	LAUNCH_TRANSITION_SPEED = 3,
+	-- 공 추적
 	LANDING_DISTANCE = 7,
 	LANDING_HEIGHT = 5,
 	TRANSITION_SPEED = 4,
@@ -121,11 +130,9 @@ Config.COMBOS = {
 	FULL_HOUSE = { name = "Full House", bonus = 15, icon = "FH", desc = "Triple Match + Cross Pair" },
 	STAR_CLUSTER = { name = "Star Cluster", bonus = 25, icon = "★", desc = "A in all 3 zones + Grand Slam" },
 }
-
--- 콤보 표시 순서 (UI용)
 Config.COMBO_ORDER = { "PAIR", "CROSS_PAIR", "STRAIGHT", "TRIPLE_MATCH", "FULL_STRAIGHT", "FULL_HOUSE", "STAR_CLUSTER" }
 
--- RemoteEvent 이름
+-- RemoteEvent
 Config.REMOTES = {
 	"RequestLaunch",
 	"GameStateUpdate",
