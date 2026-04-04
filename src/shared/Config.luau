@@ -3,29 +3,21 @@ local Config = {}
 -- 테이블 물리적 구조
 Config.TABLE = {
 	WIDTH = 20,
-	LENGTH = 55,
+	LENGTH = 70, -- 55→70 (트레이 간격 확보)
 	THICKNESS = 1,
 	HEIGHT = 3,
 	WALL_HEIGHT = 3,
 	WALL_THICKNESS = 0.6,
 	COLOR = Color3.fromRGB(235, 232, 228),
-	WALL_COLOR = Color3.fromRGB(45, 75, 180), -- 파란 벽 (레퍼런스)
+	WALL_COLOR = Color3.fromRGB(45, 75, 180),
 	MATERIAL = Enum.Material.SmoothPlastic,
 }
 
--- 핀/기둥 설정
-Config.PIN = {
-	DIAMETER = 0.4,
-	HEIGHT = 1.6,
-	COLOR = Color3.fromRGB(200, 195, 185),
-	MATERIAL = Enum.Material.SmoothPlastic,
-}
-
--- 점수 구역 (반원형 섬)
+-- 점수 구역 (간격 넓힘)
 Config.ZONES = {
 	[1] = {
 		SLOTS = 7,
-		Z_OFFSET = -5,
+		Z_OFFSET = -8,
 		RADIUS = 7,
 		BASE_POINTS = 1,
 		LABELS = { "D", "C", "B", "A", "B", "C", "D" },
@@ -34,7 +26,7 @@ Config.ZONES = {
 	},
 	[2] = {
 		SLOTS = 5,
-		Z_OFFSET = 5,
+		Z_OFFSET = 6,
 		RADIUS = 5.5,
 		BASE_POINTS = 2,
 		LABELS = { "C", "B", "A", "B", "C" },
@@ -43,7 +35,7 @@ Config.ZONES = {
 	},
 	[3] = {
 		SLOTS = 3,
-		Z_OFFSET = 15,
+		Z_OFFSET = 18,
 		RADIUS = 4,
 		BASE_POINTS = 5,
 		LABELS = { "B", "A", "B" },
@@ -52,7 +44,7 @@ Config.ZONES = {
 	},
 }
 
--- 슬롯 (핀 사이 간격 — 공이 안착하는 곳)
+-- 슬롯
 Config.SLOT = {
 	DETECT_RADIUS = 1.0,
 }
@@ -73,6 +65,7 @@ Config.BALL = {
 Config.GAME = {
 	BALLS_PER_PLAYER = 8,
 	MATCH_TIME = 180,
+	TURN_TIME = 10, -- 턴 제한시간
 	BALL_SETTLE_VELOCITY = 0.4,
 	BALL_SETTLE_TIMEOUT = 10,
 	BALL_OUT_Y = -5,
@@ -83,14 +76,15 @@ Config.GAME = {
 Config.LAUNCH = {
 	MIN_POWER = 18,
 	MAX_POWER = 75,
-	SPAWN_Z = -24,
+	SPAWN_Z = -30, -- 더 뒤로
 	SPAWN_Y_OFFSET = 1.5,
+	SPAWN_X_RANGE = 7, -- 좌우 이동 범위
 }
 
 -- 스핀 시스템
 Config.SPIN = {
-	MAX_LATERAL_FORCE = 40, -- 최대 횡방향 힘
-	CHANGE_SPEED = 2.5, -- 초당 스핀 변화량
+	MAX_LATERAL_FORCE = 40,
+	CHANGE_SPEED = 2.5,
 }
 
 -- 경사 시뮬레이션
@@ -107,7 +101,7 @@ Config.AI = {
 
 -- 카메라
 Config.CAMERA = {
-	DEFAULT_OFFSET = Vector3.new(0, 45, -40),
+	DEFAULT_OFFSET = Vector3.new(0, 50, -48),
 	DEFAULT_LOOK_AT = Vector3.new(0, 3, 3),
 	LANDING_DISTANCE = 7,
 	LANDING_HEIGHT = 5,
@@ -116,6 +110,20 @@ Config.CAMERA = {
 	VELOCITY_THRESHOLD = 4,
 	HOLD_TIME = 1.2,
 }
+
+-- 콤보 시스템
+Config.COMBOS = {
+	PAIR = { name = "Pair", bonus = 2, icon = "2x", desc = "Same letter x2 in one zone" },
+	CROSS_PAIR = { name = "Cross Pair", bonus = 3, icon = "X2", desc = "Same letter in 2 zones" },
+	STRAIGHT = { name = "Straight", bonus = 5, icon = "ABC", desc = "A + B + C across zones" },
+	TRIPLE_MATCH = { name = "Triple Match", bonus = 8, icon = "3x", desc = "Same letter in all 3 zones" },
+	FULL_STRAIGHT = { name = "Full Straight", bonus = 10, icon = "ABCD", desc = "One of each A, B, C, D" },
+	FULL_HOUSE = { name = "Full House", bonus = 15, icon = "FH", desc = "Triple Match + Cross Pair" },
+	STAR_CLUSTER = { name = "Star Cluster", bonus = 25, icon = "★", desc = "A in all 3 zones + Grand Slam" },
+}
+
+-- 콤보 표시 순서 (UI용)
+Config.COMBO_ORDER = { "PAIR", "CROSS_PAIR", "STRAIGHT", "TRIPLE_MATCH", "FULL_STRAIGHT", "FULL_HOUSE", "STAR_CLUSTER" }
 
 -- RemoteEvent 이름
 Config.REMOTES = {

@@ -55,6 +55,9 @@ remoteEvents.GameStateUpdate.OnClientEvent:Connect(function(data)
 	ui:updateScores(data.scores.player, data.scores.ai)
 	ui:updateTimer(data.timer)
 	ui:updateRemainingBalls(data.remainingBalls.player, data.remainingBalls.ai)
+	if data.combos then
+		ui:updateCombos(data.combos)
+	end
 end)
 
 -- BallCreated 이벤트 (백업)
@@ -76,6 +79,12 @@ end)
 remoteEvents.BallLanded.OnClientEvent:Connect(function(data)
 	if data.zone and data.points > 0 then
 		ui:showScorePopup(data.position, data.points, data.team)
+	end
+	if data.combos then
+		ui:updateCombos(data.combos)
+	end
+	if data.newCombos and #data.newCombos > 0 and data.team == "player" then
+		ui:showNewCombos(data.newCombos)
 	end
 end)
 

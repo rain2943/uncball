@@ -34,6 +34,10 @@ function GameManager.new()
 	-- 테이블에 안착된 공 파트 목록
 	self.settledBalls = {}
 
+	-- 콤보 상태
+	self.combos = { player = {}, ai = {} }
+	self.prevCombos = { player = {}, ai = {} }
+
 	return self
 end
 
@@ -73,6 +77,8 @@ function GameManager:startMatch(player)
 	for zoneNum = 1, 3 do
 		self.slotOwners[zoneNum] = {}
 	end
+	self.combos = { player = {}, ai = {} }
+	self.prevCombos = { player = {}, ai = {} }
 
 	-- 플레이어 캐릭터를 테이블 끝에 배치
 	self:_positionPlayer(player)
@@ -83,12 +89,26 @@ function GameManager:startMatch(player)
 		matchTime = Config.GAME.MATCH_TIME,
 	})
 
-	self.state = "PLAYER_TURN"
-	self.remotes.TurnChanged:FireClient(player, true, self.remainingBalls.player)
-	self:_broadcastState()
+	self:_startPlayerTurn()
 end
 
-function GameManager:handleLaunch(player, direction: Vector3, power: number, spin: number?)
+function GameManager:_startPlayerTurn()
+	self.state = "PLAYER_TURN"
+	self.remotes.TurnChanged:FireClient(self.player, true, self.remainingBalls.player)
+	self:_broadcastState()
+
+	-- 턴 제한시간 (10초 후 자동 발사)
+	self.turnTimer = task.delay(Config.GAME.TURN_TIME, function()
+		if self.state == "PLAYER_TURN" then
+			-- 시간 초과: 랜덤 발사
+			local dir = Vector3.new((math.random() - 0.5) * 0.5, 0, 1).Unit
+			local power = Config.LAUNCH.MIN_POWER + math.random() * 20
+			self:handleLaunch(self.player, dir, power, 0, 0)
+		end
+	end)
+end
+
+function GameManager:handleLaunch(player, direction: Vector3, power: number, spin: number?, spawnX: number?)
 	if self.state ~= "PLAYER_TURN" or player ~= self.player then
 		return
 	end
@@ -96,15 +116,21 @@ function GameManager:handleLaunch(player, direction: Vector3, power: number, spi
 		return
 	end
 
+	-- 턴 타이머 취소
+	if self.turnTimer then
+		task.cancel(self.turnTimer)
+		self.turnTimer = nil
+	end
+
 	power = math.clamp(power, Config.LAUNCH.MIN_POWER, Config.LAUNCH.MAX_POWER)
 	spin = math.clamp(spin or 0, -1, 1)
+	spawnX = math.clamp(spawnX or 0, -Config.LAUNCH.SPAWN_X_RANGE, Config.LAUNCH.SPAWN_X_RANGE)
 
 	self.remainingBalls.player -= 1
 	self.state = "BALL_MOVING"
 
-	-- task.spawn으로 감싸서 yield(task.wait) 문제 방지
 	task.spawn(function()
-		local ball = self:_createBall("player")
+		local ball = self:_createBall("player", spawnX)
 		self:_launchBall(ball, direction, power, spin)
 		self.remotes.BallCreated:FireClient(player, ball)
 		self:_waitForSettle(ball, "player")
@@ -138,13 +164,13 @@ function GameManager:_executeAITurn()
 	end)
 end
 
-function GameManager:_createBall(team: string): Part
+function GameManager:_createBall(team: string, spawnX: number?): Part
 	local ball = Instance.new("Part")
 	ball.Name = team == "player" and "PlayerBall" or "AIBall"
 	ball.Shape = Enum.PartType.Ball
 	ball.Size = Vector3.one * Config.BALL.RADIUS * 2
 	ball.Color = team == "player" and Config.BALL.COLORS.RED or Config.BALL.COLORS.BLUE
-	ball.Material = Enum.Material.SmoothPlastic
+	ball.Material = Enum.Material.Marble
 	ball.TopSurface = Enum.SurfaceType.Smooth
 	ball.BottomSurface = Enum.SurfaceType.Smooth
 	ball.CustomPhysicalProperties = PhysicalProperties.new(
@@ -155,9 +181,9 @@ function GameManager:_createBall(team: string): Part
 		1
 	)
 
-	-- 발사 위치
+	-- 발사 위치 (spawnX로 좌우 위치 조정)
 	local spawnY = Config.TABLE.HEIGHT + Config.TABLE.THICKNESS / 2 + Config.BALL.RADIUS + 0.2
-	ball.Position = Vector3.new(0, spawnY, Config.LAUNCH.SPAWN_Z)
+	ball.Position = Vector3.new(spawnX or 0, spawnY, Config.LAUNCH.SPAWN_Z)
 
 	-- 먼저 workspace에 넣기 (물리 활성화)
 	ball.Parent = workspace
@@ -194,6 +220,87 @@ function GameManager:_launchBall(ball: Part, direction: Vector3, power: number, 
 	-- 메인 임펄스
 	ball:ApplyImpulse(velocity * mass)
 
+	-- 스핀 이펙트: 공 회전 + 나선형 트레일
+	if math.abs(spin) > 0.05 then
+		-- 1) 공에 직접 회전 부여 (제약 없이, 이동 방해 안 함)
+		ball.AssemblyAngularVelocity = Vector3.new(0, spin * 25, 0)
+
+		-- 2) 공 표면에 오프셋 어태치 → 회전하면서 나선형 궤적
+		local r = Config.BALL.RADIUS * 0.7
+		local trailAtt0 = Instance.new("Attachment")
+		trailAtt0.Position = Vector3.new(r, 0, 0)
+		trailAtt0.Parent = ball
+
+		local trailAtt1 = Instance.new("Attachment")
+		trailAtt1.Position = Vector3.new(-r, 0, 0)
+		trailAtt1.Parent = ball
+
+		-- 3) 트레일 (회전 + 이동 = 나선형 리본)
+		local trail = Instance.new("Trail")
+		trail.Attachment0 = trailAtt0
+		trail.Attachment1 = trailAtt1
+		trail.Lifetime = 0.5
+		trail.MinLength = 0.05
+		trail.LightEmission = 0.5
+		trail.FaceCamera = true
+		trail.WidthScale = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(0.5, 0.6),
+			NumberSequenceKeypoint.new(1, 0),
+		})
+		trail.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.1),
+			NumberSequenceKeypoint.new(0.5, 0.4),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+
+		if spin > 0 then
+			trail.Color = ColorSequence.new(Color3.fromRGB(255, 150, 40), Color3.fromRGB(255, 60, 20))
+		else
+			trail.Color = ColorSequence.new(Color3.fromRGB(80, 200, 255), Color3.fromRGB(30, 100, 255))
+		end
+
+		trail.Parent = ball
+
+		-- 4) 스핀 방향 파티클 (좌/우로 튀어나감)
+		local particleAtt = Instance.new("Attachment")
+		particleAtt.Parent = ball
+
+		local emitter = Instance.new("ParticleEmitter")
+		emitter.Rate = 30
+		emitter.Lifetime = NumberRange.new(0.3, 0.5)
+		emitter.Speed = NumberRange.new(3, 5)
+		emitter.SpreadAngle = Vector2.new(10, 10)
+		emitter.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.3),
+			NumberSequenceKeypoint.new(1, 0),
+		})
+		emitter.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.2),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		emitter.LightEmission = 0.8
+
+		if spin > 0 then
+			emitter.Color = ColorSequence.new(Color3.fromRGB(255, 180, 60))
+			particleAtt.CFrame = CFrame.lookAt(Vector3.zero, Vector3.new(1, 0.3, 0))
+		else
+			emitter.Color = ColorSequence.new(Color3.fromRGB(100, 200, 255))
+			particleAtt.CFrame = CFrame.lookAt(Vector3.zero, Vector3.new(-1, 0.3, 0))
+		end
+
+		emitter.Parent = particleAtt
+
+		-- 5) 6초 후 정리
+		task.delay(6, function()
+			if trail and trail.Parent then trail.Enabled = false end
+			task.wait(0.5)
+			for _, obj in ipairs({ trail, trailAtt0, trailAtt1, emitter, particleAtt }) do
+				if obj and obj.Parent then obj:Destroy() end
+			end
+		end)
+	end
+
 	-- 스핀: 횡방향 지속 힘 (커브 궤적)
 	if math.abs(spin) > 0.05 then
 		local rightDir = Vector3.new(dir3.Z, 0, -dir3.X)
@@ -209,7 +316,7 @@ function GameManager:_launchBall(ball: Part, direction: Vector3, power: number, 
 		spinForce.RelativeTo = Enum.ActuatorRelativeTo.World
 		spinForce.Parent = ball
 
-		task.delay(3, function()
+		task.delay(6, function()
 			if spinForce and spinForce.Parent then
 				spinForce:Destroy()
 			end
@@ -347,6 +454,18 @@ function GameManager:_onBallResult(zoneNum, slotIdx, team, ball)
 	-- 점수 재계산
 	self:_recalculateScores()
 
+	-- 새로 달성한 콤보 감지
+	local newCombos = {}
+	local prevKeys = {}
+	for _, c in (self.prevCombos[team] or {}) do
+		prevKeys[c.key] = true
+	end
+	for _, c in (self.combos[team] or {}) do
+		if not prevKeys[c.key] then
+			table.insert(newCombos, c)
+		end
+	end
+
 	-- 클라이언트에 결과 알림
 	if self.player then
 		local points = 0
@@ -360,6 +479,8 @@ function GameManager:_onBallResult(zoneNum, slotIdx, team, ball)
 			points = points,
 			position = ball and ball.Position or nil,
 			scores = self.scores,
+			combos = self.combos,
+			newCombos = newCombos,
 		})
 	end
 
@@ -384,14 +505,12 @@ function GameManager:_nextTurn()
 			self:_executeAITurn()
 		else
 			self.currentTurn = "player"
-			self.state = "PLAYER_TURN"
-			self.remotes.TurnChanged:FireClient(self.player, true, self.remainingBalls.player)
+			self:_startPlayerTurn()
 		end
 	else
 		self.currentTurn = "player"
 		if self.remainingBalls.player > 0 then
-			self.state = "PLAYER_TURN"
-			self.remotes.TurnChanged:FireClient(self.player, true, self.remainingBalls.player)
+			self:_startPlayerTurn()
 		else
 			self.currentTurn = "ai"
 			if self.remainingBalls.ai > 0 then
@@ -401,6 +520,176 @@ function GameManager:_nextTurn()
 			end
 		end
 	end
+end
+
+function GameManager:_calculateCombos(team: string): { { key: string, name: string, bonus: number, icon: string } }
+	-- Collect letters per zone and across all zones
+	local lettersPerZone: { [number]: { [string]: number } } = {}
+	local lettersAcrossZones: { [string]: { [number]: boolean } } = {}
+
+	for zoneNum = 1, 3 do
+		lettersPerZone[zoneNum] = {}
+		local zoneConfig = Config.ZONES[zoneNum]
+		local slots = self.slotOwners[zoneNum]
+		for i = 1, zoneConfig.SLOTS do
+			if slots[i] == team then
+				local letter = zoneConfig.LABELS[i]
+				lettersPerZone[zoneNum][letter] = (lettersPerZone[zoneNum][letter] or 0) + 1
+				if not lettersAcrossZones[letter] then
+					lettersAcrossZones[letter] = {}
+				end
+				lettersAcrossZones[letter][zoneNum] = true
+			end
+		end
+	end
+
+	-- Count zones per letter
+	local zonesPerLetter: { [string]: number } = {}
+	for letter, zones in lettersAcrossZones do
+		local count = 0
+		for _ in zones do count += 1 end
+		zonesPerLetter[letter] = count
+	end
+
+	-- Check for grand slams (needed for Star Cluster)
+	local hasGrandSlam = false
+	for zoneNum = 1, 3 do
+		local zoneConfig = Config.ZONES[zoneNum]
+		local allMine = true
+		for i = 1, zoneConfig.SLOTS do
+			if self.slotOwners[zoneNum][i] ~= team then
+				allMine = false
+				break
+			end
+		end
+		if allMine and self.slotOwners[zoneNum][1] == team then
+			hasGrandSlam = true
+			break
+		end
+	end
+
+	local achieved = {}
+	local hasTripleMatch = {} -- letters with triple match
+	local hasCrossPair = {} -- letters with cross pair
+
+	-- PAIR: same letter x2+ in one zone
+	for zoneNum = 1, 3 do
+		for letter, count in lettersPerZone[zoneNum] do
+			if count >= 2 then
+				local key = "PAIR_" .. letter .. "_Z" .. zoneNum
+				table.insert(achieved, {
+					key = key,
+					comboKey = "PAIR",
+					name = Config.COMBOS.PAIR.name,
+					bonus = Config.COMBOS.PAIR.bonus,
+					icon = Config.COMBOS.PAIR.icon,
+					detail = letter .. " x2 Z" .. zoneNum,
+				})
+			end
+		end
+	end
+
+	-- CROSS PAIR: same letter in 2+ different zones
+	for letter, zoneCount in zonesPerLetter do
+		if zoneCount >= 2 then
+			local key = "CROSS_PAIR_" .. letter
+			table.insert(achieved, {
+				key = key,
+				comboKey = "CROSS_PAIR",
+				name = Config.COMBOS.CROSS_PAIR.name,
+				bonus = Config.COMBOS.CROSS_PAIR.bonus,
+				icon = Config.COMBOS.CROSS_PAIR.icon,
+				detail = letter .. " x" .. zoneCount .. " zones",
+			})
+			hasCrossPair[letter] = true
+		end
+	end
+
+	-- TRIPLE MATCH: same letter in all 3 zones
+	for letter, zoneCount in zonesPerLetter do
+		if zoneCount >= 3 then
+			local key = "TRIPLE_MATCH_" .. letter
+			table.insert(achieved, {
+				key = key,
+				comboKey = "TRIPLE_MATCH",
+				name = Config.COMBOS.TRIPLE_MATCH.name,
+				bonus = Config.COMBOS.TRIPLE_MATCH.bonus,
+				icon = Config.COMBOS.TRIPLE_MATCH.icon,
+				detail = letter .. " in all zones",
+			})
+			hasTripleMatch[letter] = true
+		end
+	end
+
+	-- STRAIGHT: A + B + C
+	local hasA = zonesPerLetter["A"] and zonesPerLetter["A"] > 0
+	local hasB = zonesPerLetter["B"] and zonesPerLetter["B"] > 0
+	local hasC = zonesPerLetter["C"] and zonesPerLetter["C"] > 0
+	local hasD = zonesPerLetter["D"] and zonesPerLetter["D"] > 0
+
+	if hasA and hasB and hasC then
+		table.insert(achieved, {
+			key = "STRAIGHT",
+			comboKey = "STRAIGHT",
+			name = Config.COMBOS.STRAIGHT.name,
+			bonus = Config.COMBOS.STRAIGHT.bonus,
+			icon = Config.COMBOS.STRAIGHT.icon,
+			detail = "A-B-C",
+		})
+	end
+
+	-- FULL STRAIGHT: A + B + C + D
+	if hasA and hasB and hasC and hasD then
+		table.insert(achieved, {
+			key = "FULL_STRAIGHT",
+			comboKey = "FULL_STRAIGHT",
+			name = Config.COMBOS.FULL_STRAIGHT.name,
+			bonus = Config.COMBOS.FULL_STRAIGHT.bonus,
+			icon = Config.COMBOS.FULL_STRAIGHT.icon,
+			detail = "A-B-C-D",
+		})
+	end
+
+	-- FULL HOUSE: Triple Match + Cross Pair of different letter
+	local tripleLetters = {}
+	for letter in hasTripleMatch do
+		table.insert(tripleLetters, letter)
+	end
+	local crossPairLetters = {}
+	for letter in hasCrossPair do
+		table.insert(crossPairLetters, letter)
+	end
+
+	for _, tLetter in tripleLetters do
+		for _, cpLetter in crossPairLetters do
+			if cpLetter ~= tLetter then
+				table.insert(achieved, {
+					key = "FULL_HOUSE_" .. tLetter .. "_" .. cpLetter,
+					comboKey = "FULL_HOUSE",
+					name = Config.COMBOS.FULL_HOUSE.name,
+					bonus = Config.COMBOS.FULL_HOUSE.bonus,
+					icon = Config.COMBOS.FULL_HOUSE.icon,
+					detail = tLetter .. "x3 + " .. cpLetter .. "x2",
+				})
+				-- Only one Full House per triple letter
+				break
+			end
+		end
+	end
+
+	-- STAR CLUSTER: A in all 3 zones + any Grand Slam
+	if hasGrandSlam and zonesPerLetter["A"] and zonesPerLetter["A"] >= 3 then
+		table.insert(achieved, {
+			key = "STAR_CLUSTER",
+			comboKey = "STAR_CLUSTER",
+			name = Config.COMBOS.STAR_CLUSTER.name,
+			bonus = Config.COMBOS.STAR_CLUSTER.bonus,
+			icon = Config.COMBOS.STAR_CLUSTER.icon,
+			detail = "A x3 zones + GS",
+		})
+	end
+
+	return achieved
 end
 
 function GameManager:_recalculateScores()
@@ -442,6 +731,15 @@ function GameManager:_recalculateScores()
 			end
 		end
 
+		-- 콤보 보너스 계산
+		local combos = self:_calculateCombos(team)
+		for _, combo in combos do
+			total = total + combo.bonus
+		end
+
+		-- 이전 콤보 저장 (새 콤보 감지용)
+		self.prevCombos[team] = self.combos[team]
+		self.combos[team] = combos
 		self.scores[team] = total
 	end
 	print("[Uncball] Scores recalculated:", "player:", self.scores.player, "ai:", self.scores.ai)
@@ -478,6 +776,7 @@ function GameManager:_broadcastState()
 		currentTurn = self.currentTurn,
 		timer = self.matchTimer,
 		state = self.state,
+		combos = self.combos,
 	})
 end
 

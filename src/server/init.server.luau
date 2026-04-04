@@ -21,11 +21,12 @@ local gm = GameManager.new()
 gm:init(remoteEvents)
 
 -- 발사 요청 처리
-remoteEvents.RequestLaunch.OnServerEvent:Connect(function(player, direction, power, spin)
+remoteEvents.RequestLaunch.OnServerEvent:Connect(function(player, direction, power, spin, spawnX)
 	if typeof(direction) ~= "Vector3" then return end
 	if typeof(power) ~= "number" then return end
 	if spin ~= nil and typeof(spin) ~= "number" then spin = 0 end
-	gm:handleLaunch(player, direction, power, spin)
+	if spawnX ~= nil and typeof(spawnX) ~= "number" then spawnX = 0 end
+	gm:handleLaunch(player, direction, power, spin, spawnX)
 end)
 
 -- 플레이어 입장 시 매치 시작
