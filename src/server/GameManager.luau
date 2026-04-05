@@ -839,10 +839,20 @@ function GameManager:_endMatch()
 		winner = "draw"
 	end
 
-	self:_fireAll("MatchEnd", {
+	self:_fireClient("MatchEnd", self.player, {
 		winner = winner,
 		scores = self.scores,
 	})
+	if self.opponent then
+		local oppWinner
+		if winner == "player" then oppWinner = "ai"
+		elseif winner == "ai" then oppWinner = "player"
+		else oppWinner = "draw" end
+		self:_fireClient("MatchEnd", self.opponent, {
+			winner = oppWinner,
+			scores = { player = self.scores.ai, ai = self.scores.player },
+		})
+	end
 
 	-- 5초 후 정리 (클라이언트에서 로비로 복귀)
 	task.delay(5, function()
@@ -966,10 +976,10 @@ function GameManager:_broadcastState()
 
 	self:_fireClient("GameStateUpdate", self.player, data)
 	if self.opponent then
-		-- 상대에게도 같은 데이터 (상대의 레터 진행도 포함)
+		-- 상대에게는 player/ai를 뒤집어서 전송 (상대 입장에서 자신이 player)
 		local oppData = {
-			scores = self.scores,
-			remainingBalls = self.remainingBalls,
+			scores = { player = self.scores.ai, ai = self.scores.player },
+			remainingBalls = { player = self.remainingBalls.ai, ai = self.remainingBalls.player },
 			currentTurn = self.currentTurn,
 			state = self.state,
 			missions = self.missions,

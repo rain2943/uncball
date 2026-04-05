@@ -175,8 +175,8 @@ remoteEvents.TimingGrade.OnServerEvent:Connect(function(player, gradeName, color
 	end
 end)
 
--- 프리뷰 위치 릴레이 (PvP: 상대에게 공 위치 전달)
-remoteEvents.PreviewUpdate.OnServerEvent:Connect(function(player, spawnX)
+-- 프리뷰 위치 릴레이 (PvP: 상대에게 공 위치 + 에임 상태 전달)
+remoteEvents.PreviewUpdate.OnServerEvent:Connect(function(player, spawnX, power, spin)
 	if typeof(spawnX) ~= "number" then return end
 	local gm = playerGMs[player]
 	if not gm then return end
@@ -188,7 +188,7 @@ remoteEvents.PreviewUpdate.OnServerEvent:Connect(function(player, spawnX)
 		target = gm.player
 	end
 	if target and target.Parent then
-		remoteEvents.PreviewUpdate:FireClient(target, spawnX)
+		remoteEvents.PreviewUpdate:FireClient(target, spawnX, power, spin)
 	end
 end)
 
@@ -279,10 +279,14 @@ Players.PlayerRemoving:Connect(function(player)
 		end
 
 		if remaining and remaining.Parent then
-			-- 남은 플레이어에게 승리 알림
+			-- 남은 플레이어에게 승리 알림 (상대 시점이면 점수 뒤집기)
+			local finalScores = gm.scores
+			if remaining == gm.opponent then
+				finalScores = { player = gm.scores.ai, ai = gm.scores.player }
+			end
 			remoteEvents.MatchEnd:FireClient(remaining, {
 				winner = "player",
-				scores = gm.scores,
+				scores = finalScores,
 				disconnected = true,
 			})
 		end

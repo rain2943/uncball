@@ -397,12 +397,7 @@ function LaunchController:_setupInput()
 				self.cameraController:setLaunchFollowX(self.spawnX)
 			end
 			-- PvP: 상대에게 위치 전송 (0.1초 쓰로틀)
-			local now = tick()
-			if now - self._lastPreviewSend > 0.1 and self._lastSentX ~= self.spawnX then
-				self._lastPreviewSend = now
-				self._lastSentX = self.spawnX
-				self.remotes.PreviewUpdate:FireServer(self.spawnX)
-			end
+			self:_sendPreview()
 		end
 	end)
 end
@@ -455,7 +450,7 @@ function LaunchController:_launch()
 	-- 발사 SFX (즉시 재생)
 	local launchSfx = Instance.new("Sound")
 	launchSfx.SoundId = "rbxassetid://121730291891328"
-	launchSfx.Volume = 0.5
+	launchSfx.Volume = 1.0
 	launchSfx.Parent = workspace
 	launchSfx:Play()
 	launchSfx.Ended:Once(function() launchSfx:Destroy() end)
@@ -505,8 +500,16 @@ function LaunchController:_startUpdateLoop()
 			end
 
 			self:_updateGuide()
+			self:_sendPreview()
 		end
 	end)
+end
+
+function LaunchController:_sendPreview()
+	local now = tick()
+	if now - self._lastPreviewSend < 0.1 then return end
+	self._lastPreviewSend = now
+	self.remotes.PreviewUpdate:FireServer(self.spawnX, self.power, self.spin)
 end
 
 return LaunchController

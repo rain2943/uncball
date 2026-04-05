@@ -962,43 +962,80 @@ end
 -- ===== Public API =====
 
 function UIController:updateScores(playerScore: number, aiScore: number)
-	if self._scoreFlipped then
-		-- 나=파랑(오른쪽), 상대=빨강(왼쪽)
-		self.elements.redScore.Text = tostring(aiScore)
-		self.elements.blueScore.Text = tostring(playerScore)
-	else
-		self.elements.redScore.Text = tostring(playerScore)
-		self.elements.blueScore.Text = tostring(aiScore)
-	end
+	-- 왼쪽=항상 나(player), 오른쪽=항상 상대(ai)
+	self.elements.redScore.Text = tostring(playerScore)
+	self.elements.blueScore.Text = tostring(aiScore)
 end
 
 function UIController:updateTimer(_seconds: number)
 	-- 게임 타이머 제거됨 (공 10개 다 쓰면 종료)
 end
 
--- 스코어보드 이름 설정 (팀에 맞게)
+-- 스코어보드 이름 설정 (내가 항상 왼쪽)
 function UIController:setupScoreboard(myTeam: string, opponentName: string)
 	local myName = Players.LocalPlayer.DisplayName
+	self._myTeam = myTeam
+
+	-- 왼쪽 박스 = 항상 나, 오른쪽 박스 = 항상 상대
+	self.elements.redName.Text = myName
+	self.elements.blueName.Text = opponentName
+
+	local redBox = self.elements.redScore.Parent
+	local blueBox = self.elements.blueName.Parent
+
 	if myTeam == "blue" then
-		-- 나=파랑(오른쪽), 상대=빨강(왼쪽)
-		self.elements.redName.Text = opponentName
-		self.elements.blueName.Text = myName
-		self._scoreFlipped = true
-	else
-		-- 나=빨강(왼쪽), 상대=파랑(오른쪽)
-		self.elements.redName.Text = myName
-		self.elements.blueName.Text = opponentName
-		self._scoreFlipped = false
+		-- 왼쪽 박스를 파란색으로, 오른쪽 박스를 빨간색으로
+		redBox.BackgroundColor3 = Color3.fromRGB(50, 100, 220)
+		local redGrad = redBox:FindFirstChildOfClass("UIGradient")
+		if redGrad then
+			redGrad.Color = ColorSequence.new(Color3.fromRGB(60, 110, 235), Color3.fromRGB(40, 80, 190))
+		end
+		local redStroke = redBox:FindFirstChildOfClass("UIStroke")
+		if redStroke then redStroke.Color = Color3.fromRGB(30, 60, 160) end
+		for _, label in redBox:GetChildren() do
+			if label:IsA("TextLabel") then
+				local ls = label:FindFirstChildOfClass("UIStroke")
+				if ls then ls.Color = Color3.fromRGB(20, 40, 120) end
+			end
+		end
+
+		blueBox.BackgroundColor3 = Color3.fromRGB(220, 55, 65)
+		local blueGrad = blueBox:FindFirstChildOfClass("UIGradient")
+		if blueGrad then
+			blueGrad.Color = ColorSequence.new(Color3.fromRGB(230, 65, 75), Color3.fromRGB(190, 40, 50))
+		end
+		local blueStroke = blueBox:FindFirstChildOfClass("UIStroke")
+		if blueStroke then blueStroke.Color = Color3.fromRGB(160, 30, 40) end
+		for _, label in blueBox:GetChildren() do
+			if label:IsA("TextLabel") then
+				local ls = label:FindFirstChildOfClass("UIStroke")
+				if ls then ls.Color = Color3.fromRGB(100, 20, 25) end
+			end
+		end
+		-- 볼 도트 색상도 교체 (playerDots=파랑, aiDots=빨강)
+		for _, dot in self.elements.playerDotRow:GetChildren() do
+			if dot:IsA("Frame") then
+				dot.BackgroundColor3 = Config.BALL.COLORS.BLUE
+				local s = dot:FindFirstChildOfClass("UIStroke")
+				if s then s.Color = Color3.fromRGB(30, 55, 160) end
+			end
+		end
+		for _, dot in self.elements.aiDotRow:GetChildren() do
+			if dot:IsA("Frame") then
+				dot.BackgroundColor3 = Config.BALL.COLORS.RED
+				local s = dot:FindFirstChildOfClass("UIStroke")
+				if s then s.Color = Color3.fromRGB(160, 30, 40) end
+			end
+		end
 	end
+	-- myTeam == "red"이면 기본 색상 그대로 (왼쪽=빨강, 오른쪽=파랑)
+
+	self._scoreFlipped = false -- 항상 왼쪽=player, 오른쪽=ai (서버가 뒤집어서 보내줌)
 end
 
 -- 상대 이름 변경 (퇴장 시)
 function UIController:setOpponentName(name: string)
-	if self._scoreFlipped then
-		self.elements.redName.Text = name
-	else
-		self.elements.blueName.Text = name
-	end
+	self.elements.blueName.Text = name
 end
 
 function UIController:hideTurnTimer()
@@ -1174,6 +1211,7 @@ function UIController:setTurn(isPlayerTurn: boolean, isBonus: boolean?)
 
 	-- 턴 텍스트 + 색상
 	local panelStroke = panel:FindFirstChildOfClass("UIStroke")
+	local myColor = self._myTeam == "blue" and Color3.fromRGB(50, 90, 210) or Color3.fromRGB(220, 50, 60)
 	if isPlayerTurn then
 		if isBonus then
 			turnText.Text = "BONUS TURN!"
@@ -1182,39 +1220,37 @@ function UIController:setTurn(isPlayerTurn: boolean, isBonus: boolean?)
 			if panelStroke then panelStroke.Color = Color3.fromRGB(255, 180, 30) end
 		else
 			turnText.Text = "YOUR TURN"
-			turnText.TextColor3 = Color3.fromRGB(220, 50, 60)
+			turnText.TextColor3 = myColor
 			panel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-			if panelStroke then panelStroke.Color = Color3.fromRGB(220, 50, 60) end
+			if panelStroke then panelStroke.Color = myColor end
 		end
 	else
+		-- 상대 턴: 내 팀 색 반대로 표시
+		local oppColor = self._myTeam == "blue" and Color3.fromRGB(220, 50, 60) or Color3.fromRGB(50, 90, 210)
 		turnText.Text = self._opponentName or "AI"
-		turnText.TextColor3 = Color3.fromRGB(50, 90, 210)
+		turnText.TextColor3 = oppColor
 		panel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-		if panelStroke then panelStroke.Color = Color3.fromRGB(50, 90, 210) end
+		if panelStroke then panelStroke.Color = oppColor end
 	end
 
-	-- ===== 턴 타이머 (독립, 항상 보임) =====
-	if isPlayerTurn then
-		turnTimer.Visible = true
-		self._turnTimerThread = task.spawn(function()
-			for sec = Config.GAME.TURN_TIME, 1, -1 do
-				turnTimer.Text = tostring(sec)
-				if sec <= 5 then
-					turnTimer.BackgroundColor3 = Color3.fromRGB(220, 40, 30)
-					local ts = turnTimer:FindFirstChildOfClass("UIStroke")
-					if ts then ts.Color = Color3.fromRGB(160, 25, 20) end
-				else
-					turnTimer.BackgroundColor3 = Color3.fromRGB(40, 42, 55)
-					local ts = turnTimer:FindFirstChildOfClass("UIStroke")
-					if ts then ts.Color = Color3.fromRGB(25, 28, 40) end
-				end
-				task.wait(1)
+	-- ===== 턴 타이머 (내 턴 + 상대 턴 모두 표시) =====
+	turnTimer.Visible = true
+	self._turnTimerThread = task.spawn(function()
+		for sec = Config.GAME.TURN_TIME, 1, -1 do
+			turnTimer.Text = tostring(sec)
+			if sec <= 5 then
+				turnTimer.BackgroundColor3 = Color3.fromRGB(220, 40, 30)
+				local ts = turnTimer:FindFirstChildOfClass("UIStroke")
+				if ts then ts.Color = Color3.fromRGB(160, 25, 20) end
+			else
+				turnTimer.BackgroundColor3 = Color3.fromRGB(40, 42, 55)
+				local ts = turnTimer:FindFirstChildOfClass("UIStroke")
+				if ts then ts.Color = Color3.fromRGB(25, 28, 40) end
 			end
-			turnTimer.Visible = false
-		end)
-	else
+			task.wait(1)
+		end
 		turnTimer.Visible = false
-	end
+	end)
 
 	-- ===== 패널 페이드 인 =====
 	panel.Visible = true
@@ -1283,16 +1319,30 @@ function UIController:_updateTurnDots()
 	local usedPlayer = math.min(maxBalls - self._playerBalls + playerOffset, maxBalls)
 	local usedAI = math.min(maxBalls - self._aiBalls + aiOffset, maxBalls)
 
-	-- 플레이어 도트: 왼쪽부터 쓴 만큼 빨강, 나머지 흰색
+	-- 팀 색상 결정
+	local myBallColor, myStrokeColor, oppBallColor, oppStrokeColor
+	if self._myTeam == "blue" then
+		myBallColor = Config.BALL.COLORS.BLUE
+		myStrokeColor = Color3.fromRGB(30, 55, 160)
+		oppBallColor = Config.BALL.COLORS.RED
+		oppStrokeColor = Color3.fromRGB(160, 30, 40)
+	else
+		myBallColor = Config.BALL.COLORS.RED
+		myStrokeColor = Color3.fromRGB(160, 30, 40)
+		oppBallColor = Config.BALL.COLORS.BLUE
+		oppStrokeColor = Color3.fromRGB(30, 55, 160)
+	end
+
+	-- 플레이어 도트: 왼쪽부터 쓴 만큼 팀색, 나머지 흰색
 	for _, dot in self.elements.playerDotRow:GetChildren() do
 		if dot:IsA("Frame") then
 			local idx = tonumber(dot.Name:match("%d+"))
 			if idx then
 				local stroke = dot:FindFirstChildOfClass("UIStroke")
 				if idx <= usedPlayer then
-					dot.BackgroundColor3 = Config.BALL.COLORS.RED
+					dot.BackgroundColor3 = myBallColor
 					dot.BackgroundTransparency = 0
-					if stroke then stroke.Color = Color3.fromRGB(160, 30, 40) end
+					if stroke then stroke.Color = myStrokeColor end
 				else
 					dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 					dot.BackgroundTransparency = 0
@@ -1302,16 +1352,16 @@ function UIController:_updateTurnDots()
 		end
 	end
 
-	-- AI 도트: 왼쪽부터 쓴 만큼 파랑, 나머지 흰색
+	-- AI 도트: 왼쪽부터 쓴 만큼 상대색, 나머지 흰색
 	for _, dot in self.elements.aiDotRow:GetChildren() do
 		if dot:IsA("Frame") then
 			local idx = tonumber(dot.Name:match("%d+"))
 			if idx then
 				local stroke = dot:FindFirstChildOfClass("UIStroke")
 				if idx <= usedAI then
-					dot.BackgroundColor3 = Config.BALL.COLORS.BLUE
+					dot.BackgroundColor3 = oppBallColor
 					dot.BackgroundTransparency = 0
-					if stroke then stroke.Color = Color3.fromRGB(30, 55, 160) end
+					if stroke then stroke.Color = oppStrokeColor end
 				else
 					dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 					dot.BackgroundTransparency = 0
