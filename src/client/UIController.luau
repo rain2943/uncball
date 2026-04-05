@@ -323,15 +323,26 @@ function UIController:_createScoreBoard(gui)
 	addStroke(blueName, Color3.fromRGB(20, 40, 120), 2)
 	self.elements.blueScore = blueScore
 
-	-- ===== 캐릭터 상반신 뷰포트 (스코어보드 양쪽 위) =====
-	local CHAR_VP_W, CHAR_VP_H = 90, 110
+	-- ===== 스코어박스 ZIndex 올리기 (캐릭터 뷰포트 위에 겹침) =====
+	redBox.ZIndex = 3
+	for _, child in redBox:GetDescendants() do
+		if child:IsA("GuiObject") or child:IsA("TextLabel") then child.ZIndex = 3 end
+	end
+	blueBox.ZIndex = 3
+	for _, child in blueBox:GetDescendants() do
+		if child:IsA("GuiObject") or child:IsA("TextLabel") then child.ZIndex = 3 end
+	end
 
-	-- 내 캐릭터 (왼쪽)
+	-- ===== 캐릭터 상반신 뷰포트 (스코어보드 뒤에서 위로 삐져나옴) =====
+	local CHAR_VP_W, CHAR_VP_H = 160, 220
+
+	-- 내 캐릭터 (왼쪽, 스코어박스 뒤에서 위로)
 	local myCharVP = Instance.new("ViewportFrame")
 	myCharVP.Name = "MyCharViewport"
 	myCharVP.Size = UDim2.new(0, CHAR_VP_W, 0, CHAR_VP_H)
-	myCharVP.Position = UDim2.new(0, 0, 0, -CHAR_VP_H)
+	myCharVP.Position = UDim2.new(0, -10, 0, -CHAR_VP_H + 42)
 	myCharVP.BackgroundTransparency = 1
+	myCharVP.ZIndex = 1
 	myCharVP.Ambient = Color3.fromRGB(180, 180, 200)
 	myCharVP.LightColor = Color3.fromRGB(255, 255, 255)
 	myCharVP.LightDirection = Vector3.new(-1, -1, -1)
@@ -342,12 +353,13 @@ function UIController:_createScoreBoard(gui)
 	myWorldModel.Parent = myCharVP
 	self.elements.myCharWorldModel = myWorldModel
 
-	-- 상대 캐릭터 (오른쪽)
+	-- 상대 캐릭터 (오른쪽, 스코어박스 뒤에서 위로)
 	local oppCharVP = Instance.new("ViewportFrame")
 	oppCharVP.Name = "OppCharViewport"
 	oppCharVP.Size = UDim2.new(0, CHAR_VP_W, 0, CHAR_VP_H)
-	oppCharVP.Position = UDim2.new(1, -CHAR_VP_W, 0, -CHAR_VP_H)
+	oppCharVP.Position = UDim2.new(1, -CHAR_VP_W + 10, 0, -CHAR_VP_H + 42)
 	oppCharVP.BackgroundTransparency = 1
+	oppCharVP.ZIndex = 1
 	oppCharVP.Ambient = Color3.fromRGB(180, 180, 200)
 	oppCharVP.LightColor = Color3.fromRGB(255, 255, 255)
 	oppCharVP.LightDirection = Vector3.new(1, -1, -1)
@@ -418,10 +430,10 @@ function UIController:_loadCharIntoViewport(viewport: ViewportFrame, worldModel,
 		-- 카메라 (상반신 클로즈업)
 		local xDir = facingRight and -1 or 1
 		local cam = Instance.new("Camera")
-		cam.FieldOfView = 20
+		cam.FieldOfView = 25
 		cam.CFrame = CFrame.lookAt(
-			Vector3.new(1.5 * xDir, 1.2, -5),
-			Vector3.new(0, 1.0, 0)
+			Vector3.new(1.5 * xDir, 1.2, -6),
+			Vector3.new(0, 0.8, 0)
 		)
 		cam.Parent = viewport
 		viewport.CurrentCamera = cam

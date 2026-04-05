@@ -149,12 +149,15 @@ function GameManager:_startPlayerTurn(isBonus: boolean?)
 
 	-- 턴 제한시간 (타임아웃 = 공 소모 + 턴 넘김)
 	self.turnTimer = task.delay(Config.GAME.TURN_TIME, function()
+		self.turnTimer = nil -- 자기 자신 참조 해제 (cancel 충돌 방지)
 		if self._destroyed then return end
-		if self.state == "PLAYER_TURN" then
-			print("[Uncball] Player turn timeout! Remaining:", self.remainingBalls.player - 1)
-			self.remainingBalls.player -= 1
-			self:_broadcastState()
+		if self.state ~= "PLAYER_TURN" then return end
 
+		print("[Uncball] Player turn timeout! Remaining:", self.remainingBalls.player - 1)
+		self.remainingBalls.player -= 1
+		self:_broadcastState()
+
+		pcall(function()
 			self:_fireClient("BallLanded", self.player, {
 				zone = nil, slot = nil, team = "player",
 				points = 0, position = nil,
@@ -168,10 +171,10 @@ function GameManager:_startPlayerTurn(isBonus: boolean?)
 					missions = self.missions, newMissions = {},
 				})
 			end
+		end)
 
-			task.wait(0.5)
-			self:_nextTurn()
-		end
+		task.wait(0.5)
+		self:_nextTurn()
 	end)
 end
 
@@ -230,11 +233,15 @@ function GameManager:_executeAITurn(isBonus: boolean?)
 
 		-- 턴 제한시간
 		self.turnTimer = task.delay(Config.GAME.TURN_TIME, function()
+			self.turnTimer = nil -- 자기 자신 참조 해제
 			if self._destroyed then return end
-			if self.state == "OPPONENT_TURN" then
-				print("[Uncball] Opponent turn timeout! Remaining:", self.remainingBalls.ai - 1)
-				self.remainingBalls.ai -= 1
-				self:_broadcastState()
+			if self.state ~= "OPPONENT_TURN" then return end
+
+			print("[Uncball] Opponent turn timeout! Remaining:", self.remainingBalls.ai - 1)
+			self.remainingBalls.ai -= 1
+			self:_broadcastState()
+
+			pcall(function()
 				self:_fireClient("BallLanded", self.player, {
 					zone = nil, slot = nil, team = "ai",
 					points = 0, position = nil,
@@ -246,9 +253,10 @@ function GameManager:_executeAITurn(isBonus: boolean?)
 					scores = { player = self.scores.ai, ai = self.scores.player },
 					missions = self.missions, newMissions = {},
 				})
-				task.wait(0.5)
-				self:_nextTurn()
-			end
+			end)
+
+			task.wait(0.5)
+			self:_nextTurn()
 		end)
 		return
 	end
