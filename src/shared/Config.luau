@@ -49,7 +49,7 @@ Config.ZONES = {
 
 -- 슬롯
 Config.SLOT = {
-	DETECT_RADIUS = 1.0,
+	DETECT_RADIUS = 0.45,
 }
 
 -- 공
