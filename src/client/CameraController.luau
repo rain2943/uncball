@@ -52,6 +52,7 @@ end
 function CameraController:enterLobbyView()
 	self.state = "LOBBY"
 	self.trackedBall = nil
+	self.launchFollowX = 0
 end
 
 -- 테이블 오프셋 설정 (매치 시작 시 호출)

@@ -82,6 +82,12 @@ local function startAIMatch(player)
 	local slotIdx, tableOffset = allocateTableSlot()
 	if not slotIdx then
 		warn("[Uncball] No table slots available for AI match!")
+		-- 2초 후 재시도 (슬롯 해제 대기)
+		task.delay(2, function()
+			if player.Parent and not playerGMs[player] then
+				startAIMatch(player)
+			end
+		end)
 		return
 	end
 
@@ -104,6 +110,12 @@ local function startPvPMatch(player1, player2)
 	local slotIdx, tableOffset = allocateTableSlot()
 	if not slotIdx then
 		warn("[Uncball] No table slots available for PvP match!")
+		-- 2초 후 재시도
+		task.delay(2, function()
+			if player1.Parent and player2.Parent then
+				startPvPMatch(player1, player2)
+			end
+		end)
 		return
 	end
 

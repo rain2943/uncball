@@ -63,8 +63,8 @@ function GameManager:init(remotes, tableOffset: Vector3?)
 
 	self._destroyed = false
 
-	-- 타이머 + looseBall 체크 루프
-	task.spawn(function()
+	-- 타이머 + looseBall 체크 루프 (참조 저장하여 cancel 가능)
+	self._loopThread = task.spawn(function()
 		while not self._destroyed do
 			task.wait(1)
 			if self._destroyed then break end
@@ -139,6 +139,7 @@ function GameManager:startMatch(player, opponent)
 end
 
 function GameManager:_startPlayerTurn(isBonus: boolean?)
+	if self.turnTimer then task.cancel(self.turnTimer); self.turnTimer = nil end
 	self.state = "PLAYER_TURN"
 	self:_fireClient("TurnChanged", self.player, true, self.remainingBalls.player, isBonus or false)
 	if self.opponent then
@@ -204,6 +205,7 @@ function GameManager:handleLaunch(player, direction: Vector3, power: number, spi
 end
 
 function GameManager:_executeAITurn(isBonus: boolean?)
+	if self.turnTimer then task.cancel(self.turnTimer); self.turnTimer = nil end
 	if self.remainingBalls.ai <= 0 then
 		self:_nextTurn()
 		return
@@ -875,6 +877,7 @@ function GameManager:_endMatch()
 	task.delay(5, function()
 		if self._destroyed then return end -- 이미 forceEndMatch로 정리됨
 		self._destroyed = true
+		if self._loopThread then task.cancel(self._loopThread); self._loopThread = nil end
 		self:_cleanupBalls()
 		self.state = "IDLE"
 		if self.onMatchEnd then
@@ -917,6 +920,7 @@ function GameManager:forceEndMatch()
 	if self._destroyed then return end
 	if self.state == "IDLE" or self.state == "MATCH_END" then
 		self._destroyed = true
+		if self._loopThread then task.cancel(self._loopThread); self._loopThread = nil end
 		self:_cleanupBalls()
 		if self.onMatchEnd then self.onMatchEnd() end
 		return
@@ -931,6 +935,7 @@ function GameManager:forceEndMatch()
 	-- 즉시 IDLE로 (모든 _waitForSettle 루프가 탈출)
 	self.state = "IDLE"
 	self._destroyed = true
+	if self._loopThread then task.cancel(self._loopThread); self._loopThread = nil end
 	self.player = nil
 	self.opponent = nil
 	self:_cleanupBalls()
@@ -1006,9 +1011,18 @@ function GameManager:_broadcastState()
 end
 
 function GameManager:_positionPlayer(player)
-	local char = player.Character or player.CharacterAdded:Wait()
-	local hrp = char:WaitForChild("HumanoidRootPart")
-	local humanoid = char:WaitForChild("Humanoid")
+	if not player or not player.Parent then return end
+	local char = player.Character
+	if not char then
+		local ok = player.CharacterAdded:Wait()
+		if not ok then return end
+		char = player.Character
+	end
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return end
 
 	-- 이동 비활성화 (먼저!)
 	humanoid.WalkSpeed = 0
