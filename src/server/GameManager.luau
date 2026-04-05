@@ -153,11 +153,19 @@ function GameManager:_startPlayerTurn(isBonus: boolean?)
 			self.remainingBalls.player -= 1
 			self:_broadcastState()
 
-			self:_fireAll("BallLanded", {
+			self:_fireClient("BallLanded", self.player, {
 				zone = nil, slot = nil, team = "player",
 				points = 0, position = nil,
 				scores = self.scores, missions = self.missions, newMissions = {},
 			})
+			if self.opponent then
+				self:_fireClient("BallLanded", self.opponent, {
+					zone = nil, slot = nil, team = "ai",
+					points = 0, position = nil,
+					scores = { player = self.scores.ai, ai = self.scores.player },
+					missions = self.missions, newMissions = {},
+				})
+			end
 
 			task.wait(0.5)
 			self:_nextTurn()
@@ -223,10 +231,16 @@ function GameManager:_executeAITurn(isBonus: boolean?)
 			if self.state == "OPPONENT_TURN" then
 				self.remainingBalls.ai -= 1
 				self:_broadcastState()
-				self:_fireAll("BallLanded", {
+				self:_fireClient("BallLanded", self.player, {
 					zone = nil, slot = nil, team = "ai",
 					points = 0, position = nil,
 					scores = self.scores, missions = self.missions, newMissions = {},
+				})
+				self:_fireClient("BallLanded", self.opponent, {
+					zone = nil, slot = nil, team = "player",
+					points = 0, position = nil,
+					scores = { player = self.scores.ai, ai = self.scores.player },
+					missions = self.missions, newMissions = {},
 				})
 				task.wait(0.5)
 				self:_nextTurn()
@@ -519,17 +533,23 @@ function GameManager:_checkLooseBalls()
 				self:_broadcastState()
 
 				-- 점수 팝업
-				self:_fireAll("BallLanded", {
-					zone = zoneNum,
-					slot = slotIdx,
-					team = team,
-					points = Config.ZONES[zoneNum].BASE_POINTS,
-					position = ball.Position,
-					scores = self.scores,
-					missions = self.missions,
-					newMissions = newMissions,
-					playerLetters = self:_collectLetters("player"),
+				local pts = Config.ZONES[zoneNum].BASE_POINTS
+				self:_fireClient("BallLanded", self.player, {
+					zone = zoneNum, slot = slotIdx, team = team,
+					points = pts, position = ball.Position,
+					scores = self.scores, missions = self.missions,
+					newMissions = newMissions, playerLetters = self:_collectLetters("player"),
 				})
+				if self.opponent then
+					self:_fireClient("BallLanded", self.opponent, {
+						zone = zoneNum, slot = slotIdx,
+						team = team == "player" and "ai" or "player",
+						points = pts, position = ball.Position,
+						scores = { player = self.scores.ai, ai = self.scores.player },
+						missions = self.missions, newMissions = newMissions,
+						playerLetters = self:_collectLetters("ai"),
+					})
+				end
 				continue -- 이 공은 안착됨, looseBalls에서 제거
 			end
 		end
@@ -626,10 +646,10 @@ function GameManager:_onBallResult(zoneNum, slotIdx, team, ball)
 		local oppLandedData = {
 			zone = zoneNum,
 			slot = slotIdx,
-			team = team,
+			team = team == "player" and "ai" or "player", -- 상대 시점으로 팀 뒤집기
 			points = math.max(pointsGained, 0),
 			position = ball and ball.Position or nil,
-			scores = self.scores,
+			scores = { player = self.scores.ai, ai = self.scores.player }, -- 점수도 뒤집기
 			missions = self.missions,
 			newMissions = newMissions,
 			playerLetters = self:_collectLetters("ai"),

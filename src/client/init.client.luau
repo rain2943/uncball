@@ -252,8 +252,7 @@ remoteEvents.BallLanded.OnClientEvent:Connect(function(data)
 	if data.missions then
 		ui:updateMissions(data.missions, data.playerLetters)
 	end
-	if data.newMissions and #data.newMissions > 0 and data.team == "player" then
-		ui:showNewMissions(data.newMissions)
+	if data.newMissions and #data.newMissions > 0 then
 		playSound(SFX.MISSION, 0.6)
 	end
 end)
