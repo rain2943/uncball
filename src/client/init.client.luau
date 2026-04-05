@@ -224,13 +224,12 @@ remoteEvents.BallCreated.OnClientEvent:Connect(function(ball)
 	ui:hideTurnTimer()
 	-- 상대 가이드 도트 숨기기
 	hideOppGuideDots()
+	-- 발사 SFX (내 공이든 상대 공이든 즉시 재생)
+	playSound(SFX.LAUNCH, 1.0)
 
 	if ball and ball.Parent then
 		camera:trackBall(ball)
 		attachCollisionSound(ball)
-		if ball.Name == "AIBall" then
-			playSound(SFX.LAUNCH, 1.0)
-		end
 	end
 end)
 
