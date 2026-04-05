@@ -334,13 +334,18 @@ function UIController:_createScoreBoard(gui)
 	end
 
 	-- ===== 캐릭터 상반신 뷰포트 (스코어보드 뒤에서 위로 삐져나옴) =====
-	local CHAR_VP_W, CHAR_VP_H = 160, 220
+	-- 반응형: 화면 높이 기준 크기 결정
+	local vpSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+	local isMobile = vpSize.Y > vpSize.X
+	local CHAR_VP_W = isMobile and 80 or 120
+	local CHAR_VP_H = isMobile and 105 or 155
+	local CHAR_OVERLAP = isMobile and 30 or 40
 
 	-- 내 캐릭터 (왼쪽, 스코어박스 뒤에서 위로)
 	local myCharVP = Instance.new("ViewportFrame")
 	myCharVP.Name = "MyCharViewport"
 	myCharVP.Size = UDim2.new(0, CHAR_VP_W, 0, CHAR_VP_H)
-	myCharVP.Position = UDim2.new(0, -10, 0, -CHAR_VP_H + 42)
+	myCharVP.Position = UDim2.new(0, -5, 0, -CHAR_VP_H + CHAR_OVERLAP)
 	myCharVP.BackgroundTransparency = 1
 	myCharVP.ZIndex = 1
 	myCharVP.Ambient = Color3.fromRGB(180, 180, 200)
@@ -357,7 +362,7 @@ function UIController:_createScoreBoard(gui)
 	local oppCharVP = Instance.new("ViewportFrame")
 	oppCharVP.Name = "OppCharViewport"
 	oppCharVP.Size = UDim2.new(0, CHAR_VP_W, 0, CHAR_VP_H)
-	oppCharVP.Position = UDim2.new(1, -CHAR_VP_W + 10, 0, -CHAR_VP_H + 42)
+	oppCharVP.Position = UDim2.new(1, -CHAR_VP_W + 5, 0, -CHAR_VP_H + CHAR_OVERLAP)
 	oppCharVP.BackgroundTransparency = 1
 	oppCharVP.ZIndex = 1
 	oppCharVP.Ambient = Color3.fromRGB(180, 180, 200)
@@ -430,9 +435,9 @@ function UIController:_loadCharIntoViewport(viewport: ViewportFrame, worldModel,
 		-- 카메라 (상반신 클로즈업)
 		local xDir = facingRight and -1 or 1
 		local cam = Instance.new("Camera")
-		cam.FieldOfView = 25
+		cam.FieldOfView = 30
 		cam.CFrame = CFrame.lookAt(
-			Vector3.new(1.5 * xDir, 1.2, -6),
+			Vector3.new(2.0 * xDir, 1.5, -8),
 			Vector3.new(0, 0.8, 0)
 		)
 		cam.Parent = viewport
@@ -778,7 +783,7 @@ function UIController:_createMissionPanel(gui)
 	local toggleBtn = Instance.new("TextButton")
 	toggleBtn.Name = "MissionToggle"
 	toggleBtn.Size = UDim2.new(0, 46, 0, 46)
-	toggleBtn.Position = UDim2.new(0, 10, 1, -105)
+	toggleBtn.Position = UDim2.new(0, 10, 1, -225)
 	toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
 	toggleBtn.BackgroundTransparency = 0
 	toggleBtn.Text = "M"
@@ -834,15 +839,16 @@ function UIController:_createMissionPanel(gui)
 		if self._missionOpen then
 			-- 패널을 버튼 위에 펼치기
 			panel.Visible = true
-			panel.Position = UDim2.new(0, 6, 1, -100 - panelH - 8)
+			local panelY = -225 - panelH - 8
+			panel.Position = UDim2.new(0, 6, 1, panelY)
 			TweenService:Create(panel, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-				Position = UDim2.new(0, 6, 1, -100 - panelH - 8),
+				Position = UDim2.new(0, 6, 1, panelY),
 			}):Play()
 			toggleBtn.Text = "X"
 		else
 			-- 패널 접기
 			TweenService:Create(panel, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-				Position = UDim2.new(0, 6, 1, -100),
+				Position = UDim2.new(0, 6, 1, -225),
 			}):Play()
 			task.delay(0.15, function()
 				if not self._missionOpen then

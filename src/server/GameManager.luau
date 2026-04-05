@@ -626,20 +626,14 @@ function GameManager:_snapBallToSlot(ball: Part, zoneNum: number, slotIdx: numbe
 end
 
 function GameManager:_onBallResult(zoneNum, slotIdx, team, ball)
-	-- 점수 차이 계산 (연속 보너스 + 그랜드슬램 포함)
+	-- 점수 차이 계산 (기본점 + 연속 보너스 + 그랜드슬램)
 	local scoreBefore = self.scores[team] or 0
 	self:_recalculateScores()
 	local scoreAfter = self.scores[team] or 0
 	local pointsGained = scoreAfter - scoreBefore
 
-	-- 미션 체크
+	-- 미션 체크 (미션 보너스는 별도 사운드, pointsGained에는 기본 점수만)
 	local newMissions = self:_checkMissions(team)
-	-- 미션 보너스는 별도 팝업이므로 pointsGained에서 제외
-	local missionBonus = 0
-	for _, m in newMissions do
-		missionBonus = missionBonus + m.bonus
-	end
-	pointsGained = pointsGained - missionBonus
 
 	-- 클라이언트에 결과 알림
 	local landedData = {
