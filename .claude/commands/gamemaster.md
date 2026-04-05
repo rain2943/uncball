@@ -231,8 +231,14 @@ src/
 - CAMERA: LOBBY=(0,100,-200), OVERVIEW=(0,55,-50), LAUNCH=(0,10,-52)
 - LOBBY: MATCH_TIMEOUT=**5s**
 
+## PvP Preview System
+- 상대 턴 시 상대의 공 위치 조정이 실시간으로 보임 (0.1초 쓰로틀)
+- 상대 팀 색 반투명 프리뷰 공 표시 + 카메라 따라감
+- 가이드 도트/타이밍/스핀 인디케이터는 상대에게 안 보임
+- 발사 시 프리뷰 자동 정리
+
 ## Remotes
-RequestLaunch, GameStateUpdate, BallLanded, TurnChanged, MatchStart, MatchEnd, BallCreated, RequestMatch, MatchFound, CancelMatchmaking, MatchCancelled
+RequestLaunch, GameStateUpdate, BallLanded, TurnChanged, MatchStart, MatchEnd, BallCreated, RequestMatch, MatchFound, CancelMatchmaking, MatchCancelled, PreviewUpdate
 
 ## Audio
 - **BGM**: rbxassetid://126841253996417 (매치 시작 시 재생, 로비 복귀 시 정지)
