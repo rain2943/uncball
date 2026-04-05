@@ -227,6 +227,7 @@ function UIController:_createScoreBoard(gui)
 
 	-- 이름
 	local redName = Instance.new("TextLabel")
+	redName.Name = "RedName"
 	redName.Size = UDim2.new(0.55, 0, 1, 0)
 	redName.Position = UDim2.new(0.03, 0, 0, 0)
 	redName.BackgroundTransparency = 1
@@ -237,6 +238,7 @@ function UIController:_createScoreBoard(gui)
 	redName.TextXAlignment = Enum.TextXAlignment.Left
 	redName.Parent = redBox
 	addStroke(redName, Color3.fromRGB(100, 20, 25), 2)
+	self.elements.redName = redName
 
 	-- 점수
 	local redScore = Instance.new("TextLabel")
@@ -307,6 +309,7 @@ function UIController:_createScoreBoard(gui)
 
 	-- 이름
 	local blueName = Instance.new("TextLabel")
+	blueName.Name = "BlueName"
 	blueName.Size = UDim2.new(0.55, 0, 1, 0)
 	blueName.Position = UDim2.new(0.42, 0, 0, 0)
 	blueName.BackgroundTransparency = 1
@@ -316,6 +319,7 @@ function UIController:_createScoreBoard(gui)
 	blueName.Font = FONT_BOLD
 	blueName.TextXAlignment = Enum.TextXAlignment.Right
 	blueName.Parent = blueBox
+	self.elements.blueName = blueName
 	addStroke(blueName, Color3.fromRGB(20, 40, 120), 2)
 	self.elements.blueScore = blueScore
 end
@@ -958,12 +962,43 @@ end
 -- ===== Public API =====
 
 function UIController:updateScores(playerScore: number, aiScore: number)
-	self.elements.redScore.Text = tostring(playerScore)
-	self.elements.blueScore.Text = tostring(aiScore)
+	if self._scoreFlipped then
+		-- 나=파랑(오른쪽), 상대=빨강(왼쪽)
+		self.elements.redScore.Text = tostring(aiScore)
+		self.elements.blueScore.Text = tostring(playerScore)
+	else
+		self.elements.redScore.Text = tostring(playerScore)
+		self.elements.blueScore.Text = tostring(aiScore)
+	end
 end
 
 function UIController:updateTimer(_seconds: number)
 	-- 게임 타이머 제거됨 (공 10개 다 쓰면 종료)
+end
+
+-- 스코어보드 이름 설정 (팀에 맞게)
+function UIController:setupScoreboard(myTeam: string, opponentName: string)
+	local myName = Players.LocalPlayer.DisplayName
+	if myTeam == "blue" then
+		-- 나=파랑(오른쪽), 상대=빨강(왼쪽)
+		self.elements.redName.Text = opponentName
+		self.elements.blueName.Text = myName
+		self._scoreFlipped = true
+	else
+		-- 나=빨강(왼쪽), 상대=파랑(오른쪽)
+		self.elements.redName.Text = myName
+		self.elements.blueName.Text = opponentName
+		self._scoreFlipped = false
+	end
+end
+
+-- 상대 이름 변경 (퇴장 시)
+function UIController:setOpponentName(name: string)
+	if self._scoreFlipped then
+		self.elements.redName.Text = name
+	else
+		self.elements.blueName.Text = name
+	end
 end
 
 function UIController:hideTurnTimer()

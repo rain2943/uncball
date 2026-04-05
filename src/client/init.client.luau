@@ -161,6 +161,7 @@ remoteEvents.MatchStart.OnClientEvent:Connect(function(data)
 	ui:updateRemainingBalls(data.ballsPerPlayer, data.ballsPerPlayer)
 	ui._opponentName = data.opponentName or "AI"
 	ui._opponentId = data.opponentId
+	ui:setupScoreboard(data.teamColor or "red", data.opponentName or "AI")
 
 	if data.missions then
 		ui:initMissions(data.missions)
@@ -242,6 +243,10 @@ end)
 remoteEvents.MatchEnd.OnClientEvent:Connect(function(data)
 	inMatch = false
 	launch:setEnabled(false)
+	-- 상대 퇴장 시 "Leave!" 표시
+	if data.disconnected then
+		ui:setOpponentName("Leave!")
+	end
 	ui:showMatchResult(data.winner, data.scores)
 
 	-- 5초 후 암전 → 로비 복귀
