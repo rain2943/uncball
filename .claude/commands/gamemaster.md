@@ -44,6 +44,10 @@ You are the Game Master for **Uncball (Star Cluster Ball / 星罗球)**, a Roblo
 - 타이밍 인디케이터 (Perfect~Miss 5등급, 파워 비례 난이도)
 - 점수 팝업 실제 획득 점수 표시
 
+- **멀티 테이블 동시 매치** (매치마다 독립 테이블 동적 생성, X축 100 studs 간격)
+- 테이블 슬롯 할당/해제 (최대 10개 동시 매치)
+- pendingMatches 다중 카운트다운 지원
+
 ### ❌ 미구현
 - 보상/스킨 시스템
 - 레벨 디자인 변형
@@ -234,6 +238,7 @@ src/
 - MISSIONS: EASY=+3(2글자), MEDIUM=+6(3글자), HARD=+10(4글자)
 - CAMERA: LOBBY=(0,100,-200), OVERVIEW=(0,55,-50), LAUNCH=(0,10,-52), CHAR_VIEWPORT=(FOV=22, Z=-16)
 - LOBBY: MATCH_TIMEOUT=**5s**
+- TABLE_SPACING=**100** (동시 매치 테이블 간 X 간격)
 
 ## PvP Preview System
 - 상대 턴 시 상대의 공 위치 + 에임 상태 실시간 릴레이 (0.1초 쓰로틀)
@@ -266,9 +271,15 @@ RequestLaunch, GameStateUpdate, BallLanded, TurnChanged, MatchStart, MatchEnd, B
   - 미션: rbxassetid://5711770745
   - 턴 시작: rbxassetid://127421479045055
 
+## Multi-Table Architecture
+- 매치 시작 시 `TableBuilder.build(tableOffset)` → 독립 테이블 + slotPositions 반환
+- `GameManager`가 자기 테이블/공/슬롯 소유 (workspace 전역 스캔 없음)
+- 매치 종료 시 `tableModel:Destroy()` + 슬롯 해제
+- 클라이언트: `MatchStart`에서 `tableOffset` 수신 → 카메라/런치/프리뷰에 적용
+- `pendingMatches` dict로 동시 여러 쌍 카운트다운 지원
+
 ## Remaining Work
 1. 보상/스킨 시스템
 2. 레벨 디자인 변형
-3. PvP 매칭 실전 테스트 + 버그 수정
 
 When the user asks you to work on any aspect of this game, reference these rules and design specs to ensure consistency.
