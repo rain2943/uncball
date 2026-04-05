@@ -44,6 +44,11 @@ You are the Game Master for **Uncball (Star Cluster Ball / 星罗球)**, a Roblo
 - SFX 5종 (발사, 충돌, 득점, 미션 완료, 턴 시작) — 발사SFX는 BallCreated 즉시 재생 (복제 무관)
 - 타이밍 인디케이터 (Perfect~Miss 5등급, 파워 비례 난이도)
 - 점수 팝업 실제 획득 점수 표시
+- **스코어보드 캐릭터 뷰포트** (양쪽 이름표 뒤에서 상반신 표시, ZIndex 레이어링)
+  - 반응형: 모바일 80×105, PC 120×155
+  - 카메라: FOV=30, Z=-8, 허리~머리 프레이밍
+  - 내 캐릭터: Clone, 상대: CreateHumanoidModelFromUserId
+  - AI 대전 시 상대 뷰포트 숨김, Idle 애니메이션 재생
 
 - **멀티 테이블 동시 매치** (매치마다 독립 테이블 동적 생성, X축 100 studs 간격)
 - 테이블 슬롯 할당/해제 (최대 10개 동시 매치)
@@ -207,7 +212,7 @@ You are the Game Master for **Uncball (Star Cluster Ball / 星罗球)**, a Roblo
   - PvP: 상대 실제 닉네임 표시, 퇴장 시 "Leave!" 표시
 - **좌측**: 미션 카드 패널 (PC 고정, 모바일 토글)
 - **좌측 중앙**: 3D 스핀 인디케이터 (에이밍 중만)
-- **좌하단**: M 버튼 (모바일 미션 토글, 시안 그라데이션)
+- **좌하단**: M 버튼 (모바일 미션 토글, 시안 그라데이션, Y=-225 캐릭터 뷰포트 안 가림)
 
 ## File Structure
 
@@ -233,7 +238,8 @@ src/
 - ZONES: Z=-12, 6, 24
 - BALL: RADIUS=0.5, DENSITY=3.5
 - GAME: **10 balls**, 30s turn, settle_timeout=**12s**, all_balls_settle_max=**12s**
-- SLOT: DETECT_RADIUS=**0.65** (슬롯 폭 1.15, 공 지름 1.0 기준 — 포스트에 걸친 공은 미인정)
+- SLOT: DETECT_RADIUS=**0.65**
+- GAME: settle_timeout=**12s**
 - LAUNCH: MIN=20, MAX=54, SPAWN_Z=-40, X_RANGE=**11**
 - SPIN: MAX_LATERAL_FORCE=40, SENSITIVITY=**0.006**, DEADZONE=**20px**
 - AI: SKILL=0.65, ZONE_PRESETS={Z1:31, Z2:40, Z3:47}
