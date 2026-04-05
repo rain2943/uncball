@@ -136,6 +136,71 @@ local function attachCollisionSound(ball: Part)
 	end)
 end
 
+-- === PvP 상대 프리뷰 (함수 정의) ===
+local opponentPreview = nil
+local opponentTeamColor = Config.BALL.COLORS.BLUE
+local OPP_GUIDE_DOT_COUNT = 20
+local OPP_GUIDE_DOT_SIZE = 0.22
+local oppGuideDots = {}
+
+local function createOppGuideDots()
+	for i = 1, OPP_GUIDE_DOT_COUNT do
+		local dot = Instance.new("Part")
+		dot.Name = "OppGuideDot" .. i
+		dot.Shape = Enum.PartType.Ball
+		dot.Size = Vector3.one * OPP_GUIDE_DOT_SIZE
+		dot.Material = Enum.Material.Neon
+		dot.Color = opponentTeamColor
+		dot.Transparency = 0.5
+		dot.Anchored = true
+		dot.CanCollide = false
+		dot.CanQuery = false
+		dot.CanTouch = false
+		dot.Parent = workspace
+		oppGuideDots[i] = dot
+	end
+end
+
+local function hideOppGuideDots()
+	for _, dot in oppGuideDots do
+		dot.Transparency = 1
+	end
+end
+
+local function destroyOppGuideDots()
+	for _, dot in oppGuideDots do
+		if dot.Parent then dot:Destroy() end
+	end
+	oppGuideDots = {}
+end
+
+local function updateOppGuide(spawnX: number, power: number, spin: number)
+	if #oppGuideDots == 0 then
+		createOppGuideDots()
+	end
+
+	local spawnY = Config.TABLE.HEIGHT + Config.TABLE.THICKNESS / 2 + Config.BALL.RADIUS + 0.2
+	local spawnPos = Vector3.new(spawnX, spawnY, Config.LAUNCH.SPAWN_Z) + currentTableOffset
+	local currentPower = Config.LAUNCH.MIN_POWER + (Config.LAUNCH.MAX_POWER - Config.LAUNCH.MIN_POWER) * power
+
+	local mass = 2
+	local lateralAccel = spin * Config.SPIN.MAX_LATERAL_FORCE / mass * 2.5
+	local maxDist = power * 20
+
+	for i, dot in oppGuideDots do
+		local t_ratio = i / OPP_GUIDE_DOT_COUNT
+		local dist = maxDist * t_ratio
+		local avgSpeed = currentPower * (1 - t_ratio * 0.5)
+		local time = dist / math.max(avgSpeed, 1)
+		local lateralOffset = 0.5 * lateralAccel * time * time
+
+		local pos = spawnPos + Vector3.new(0, 0, 1) * dist + Vector3.new(1, 0, 0) * lateralOffset
+		dot.Position = Vector3.new(pos.X, spawnY - Config.BALL.RADIUS + 0.1, pos.Z)
+		dot.Color = opponentTeamColor
+		dot.Transparency = 0.5
+	end
+end
+
 -- === 로비 → 매치 플로우 ===
 
 -- PLAY 버튼 콜백: 서버에 매칭 요청
@@ -325,71 +390,6 @@ remoteEvents.TimingGrade.OnClientEvent:Connect(function(gradeName, colorArr)
 		ui:showTimingGrade(gradeName, color)
 	end
 end)
-
--- === PvP 상대 프리뷰 ===
-local opponentPreview = nil
-local opponentTeamColor = Config.BALL.COLORS.BLUE
-local OPP_GUIDE_DOT_COUNT = 20
-local OPP_GUIDE_DOT_SIZE = 0.22
-local oppGuideDots = {}
-
-local function createOppGuideDots()
-	for i = 1, OPP_GUIDE_DOT_COUNT do
-		local dot = Instance.new("Part")
-		dot.Name = "OppGuideDot" .. i
-		dot.Shape = Enum.PartType.Ball
-		dot.Size = Vector3.one * OPP_GUIDE_DOT_SIZE
-		dot.Material = Enum.Material.Neon
-		dot.Color = opponentTeamColor
-		dot.Transparency = 0.5
-		dot.Anchored = true
-		dot.CanCollide = false
-		dot.CanQuery = false
-		dot.CanTouch = false
-		dot.Parent = workspace
-		oppGuideDots[i] = dot
-	end
-end
-
-local function hideOppGuideDots()
-	for _, dot in oppGuideDots do
-		dot.Transparency = 1
-	end
-end
-
-local function destroyOppGuideDots()
-	for _, dot in oppGuideDots do
-		if dot.Parent then dot:Destroy() end
-	end
-	oppGuideDots = {}
-end
-
-local function updateOppGuide(spawnX: number, power: number, spin: number)
-	if #oppGuideDots == 0 then
-		createOppGuideDots()
-	end
-
-	local spawnY = Config.TABLE.HEIGHT + Config.TABLE.THICKNESS / 2 + Config.BALL.RADIUS + 0.2
-	local spawnPos = Vector3.new(spawnX, spawnY, Config.LAUNCH.SPAWN_Z) + currentTableOffset
-	local currentPower = Config.LAUNCH.MIN_POWER + (Config.LAUNCH.MAX_POWER - Config.LAUNCH.MIN_POWER) * power
-
-	local mass = 2
-	local lateralAccel = spin * Config.SPIN.MAX_LATERAL_FORCE / mass * 2.5
-	local maxDist = power * 20
-
-	for i, dot in oppGuideDots do
-		local t_ratio = i / OPP_GUIDE_DOT_COUNT
-		local dist = maxDist * t_ratio
-		local avgSpeed = currentPower * (1 - t_ratio * 0.5)
-		local time = dist / math.max(avgSpeed, 1)
-		local lateralOffset = 0.5 * lateralAccel * time * time
-
-		local pos = spawnPos + Vector3.new(0, 0, 1) * dist + Vector3.new(1, 0, 0) * lateralOffset
-		dot.Position = Vector3.new(pos.X, spawnY - Config.BALL.RADIUS + 0.1, pos.Z)
-		dot.Color = opponentTeamColor
-		dot.Transparency = 0.5
-	end
-end
 
 -- 상대 프리뷰 공 생성/이동
 remoteEvents.PreviewUpdate.OnClientEvent:Connect(function(spawnX, power, spin)
