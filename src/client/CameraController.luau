@@ -23,6 +23,7 @@ function CameraController.new()
 	self.state = "OVERVIEW"
 	self.landingHoldStart = 0
 	self.launchDelayStart = 0
+	self.tableOffset = Vector3.zero
 
 	self.overviewCF = CFrame.lookAt(Config.CAMERA.OVERVIEW_OFFSET, Config.CAMERA.OVERVIEW_LOOK_AT)
 	self.launchCF = CFrame.lookAt(Config.CAMERA.LAUNCH_OFFSET, Config.CAMERA.LAUNCH_LOOK_AT)
@@ -51,6 +52,12 @@ end
 function CameraController:enterLobbyView()
 	self.state = "LOBBY"
 	self.trackedBall = nil
+end
+
+-- 테이블 오프셋 설정 (매치 시작 시 호출)
+function CameraController:setTableOffset(offset: Vector3)
+	self.tableOffset = offset or Vector3.zero
+	self.overviewCF = CFrame.lookAt(Config.CAMERA.OVERVIEW_OFFSET + self.tableOffset, Config.CAMERA.OVERVIEW_LOOK_AT + self.tableOffset)
 end
 
 -- 플레이어 턴: 발사 뷰로 전환
@@ -92,8 +99,8 @@ function CameraController:_update(dt: number)
 		-- 공 X 위치를 따라감
 		local followX = self.launchFollowX or 0
 		local targetCF = CFrame.lookAt(
-			Config.CAMERA.LAUNCH_OFFSET + Vector3.new(followX * 1.0, 0, 0),
-			Config.CAMERA.LAUNCH_LOOK_AT + Vector3.new(followX * 0.8, 0, 0)
+			Config.CAMERA.LAUNCH_OFFSET + self.tableOffset + Vector3.new(followX * 1.0, 0, 0),
+			Config.CAMERA.LAUNCH_LOOK_AT + self.tableOffset + Vector3.new(followX * 0.8, 0, 0)
 		)
 		self.camera.CFrame = self.camera.CFrame:Lerp(targetCF, math.min(dt * Config.CAMERA.LAUNCH_TRANSITION_SPEED, 1))
 
@@ -132,7 +139,7 @@ function CameraController:_updateTracking(dt: number)
 
 	if speed < Config.CAMERA.VELOCITY_THRESHOLD then
 		for zoneNum = 1, 3 do
-			local zoneZ = Config.ZONES[zoneNum].Z_OFFSET
+			local zoneZ = Config.ZONES[zoneNum].Z_OFFSET + self.tableOffset.Z
 			local zoneR = Config.ZONES[zoneNum].RADIUS
 			if math.abs(ballPos.Z - zoneZ) < zoneR * 1.5 then
 				self.state = "LANDING_FOCUS"

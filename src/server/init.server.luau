@@ -2,7 +2,6 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 local GameManager = require(script:WaitForChild("GameManager"))
-local TableBuilder = require(script:WaitForChild("TableBuilder"))
 
 -- RemoteEvent 생성
 local remotes = Instance.new("Folder")
@@ -17,14 +16,30 @@ for _, name in Config.REMOTES do
 	remoteEvents[name] = remote
 end
 
--- 테이블 빌드 (1회)
-TableBuilder.build()
+-- === 테이블 슬롯 관리 (동시 매치 지원) ===
+local usedTableSlots = {} -- [slotIndex] = true
+
+local function allocateTableSlot(): (number?, Vector3?)
+	for i = 0, 9 do
+		if not usedTableSlots[i] then
+			usedTableSlots[i] = true
+			return i, Vector3.new(i * Config.TABLE_SPACING, 0, 0)
+		end
+	end
+	return nil, nil
+end
+
+local function releaseTableSlot(slotIndex: number)
+	if slotIndex then
+		usedTableSlots[slotIndex] = nil
+	end
+end
 
 -- === 매칭 시스템 ===
 local matchQueue = {} -- { player1, player2, ... }
 local playerGMs = {} -- player → GameManager (현재 진행 중인 매치)
 local matchTimers = {} -- player → AI 타임아웃 thread
-local pendingMatch = nil -- { player1, player2, timer, countdown }
+local pendingMatches = {} -- key → { player1, player2, timer, key }
 
 -- 큐에서 플레이어 제거
 local function removeFromQueue(player)
@@ -45,9 +60,52 @@ local function isInQueue(player)
 	return false
 end
 
+-- 페어 키 생성
+local function pairKey(p1, p2)
+	local id1, id2 = p1.UserId, p2.UserId
+	if id1 > id2 then id1, id2 = id2, id1 end
+	return id1 .. "_" .. id2
+end
+
+-- 플레이어가 포함된 pendingMatch 찾기
+local function findPendingMatch(player)
+	for key, pm in pendingMatches do
+		if pm.player1 == player or pm.player2 == player then
+			return key, pm
+		end
+	end
+	return nil, nil
+end
+
+-- AI 매치 시작 (테이블 슬롯 할당 포함)
+local function startAIMatch(player)
+	local slotIdx, tableOffset = allocateTableSlot()
+	if not slotIdx then
+		warn("[Uncball] No table slots available for AI match!")
+		return
+	end
+
+	local gm = GameManager.new()
+	gm:init(remoteEvents, tableOffset)
+	gm._tableSlotIdx = slotIdx
+	gm.onMatchEnd = function()
+		playerGMs[player] = nil
+		releaseTableSlot(slotIdx)
+		removeFromQueue(player)
+	end
+	gm:startMatch(player)
+	playerGMs[player] = gm
+end
+
 -- PvP 매치 시작
 local function startPvPMatch(player1, player2)
 	print("[Uncball] Starting PvP match:", player1.Name, "vs", player2.Name)
+
+	local slotIdx, tableOffset = allocateTableSlot()
+	if not slotIdx then
+		warn("[Uncball] No table slots available for PvP match!")
+		return
+	end
 
 	-- 기존 AI 매치 강제 종료
 	if playerGMs[player1] then
@@ -61,10 +119,12 @@ local function startPvPMatch(player1, player2)
 
 	-- 새 PvP 매치
 	local gm = GameManager.new()
-	gm:init(remoteEvents)
+	gm:init(remoteEvents, tableOffset)
+	gm._tableSlotIdx = slotIdx
 	gm.onMatchEnd = function()
 		playerGMs[player1] = nil
 		playerGMs[player2] = nil
+		releaseTableSlot(slotIdx)
 	end
 	gm:startMatch(player1, player2)
 	playerGMs[player1] = gm
@@ -73,7 +133,8 @@ end
 
 -- 매칭 발견 → 5초 카운트다운 시작
 local function startMatchCountdown(player1, player2)
-	if pendingMatch then return end -- 이미 진행 중
+	local key = pairKey(player1, player2)
+	if pendingMatches[key] then return end
 
 	print("[Uncball] Match found:", player1.Name, "↔", player2.Name)
 
@@ -81,7 +142,8 @@ local function startMatchCountdown(player1, player2)
 	if matchTimers[player1] then task.cancel(matchTimers[player1]); matchTimers[player1] = nil end
 	if matchTimers[player2] then task.cancel(matchTimers[player2]); matchTimers[player2] = nil end
 
-	pendingMatch = { player1 = player1, player2 = player2 }
+	local pm = { player1 = player1, player2 = player2, key = key }
+	pendingMatches[key] = pm
 
 	-- 양쪽에 알림
 	remoteEvents.MatchFound:FireClient(player1, {
@@ -94,33 +156,29 @@ local function startMatchCountdown(player1, player2)
 	})
 
 	-- 5초 카운트다운
-	pendingMatch.timer = task.delay(5, function()
-		if not pendingMatch then return end
-		local p1 = pendingMatch.player1
-		local p2 = pendingMatch.player2
-		pendingMatch = nil
+	pm.timer = task.delay(5, function()
+		if not pendingMatches[key] then return end
+		pendingMatches[key] = nil
 
-		if p1.Parent and p2.Parent then
-			startPvPMatch(p1, p2)
+		if player1.Parent and player2.Parent then
+			startPvPMatch(player1, player2)
 		end
 	end)
 end
 
 -- 매칭 취소
 local function cancelPendingMatch(cancelledBy)
-	if not pendingMatch then return end
-
-	local p1 = pendingMatch.player1
-	local p2 = pendingMatch.player2
+	local key, pm = findPendingMatch(cancelledBy)
+	if not pm then return end
 
 	-- 타이머 취소
-	if pendingMatch.timer then
-		task.cancel(pendingMatch.timer)
+	if pm.timer then
+		task.cancel(pm.timer)
 	end
-	pendingMatch = nil
+	pendingMatches[key] = nil
 
 	-- 상대에게 취소 알림
-	local other = (cancelledBy == p1) and p2 or p1
+	local other = (cancelledBy == pm.player1) and pm.player2 or pm.player1
 	if other and other.Parent then
 		remoteEvents.MatchCancelled:FireClient(other, {})
 		-- 상대는 다시 큐에 등록 (AI 타임아웃 재시작)
@@ -133,24 +191,17 @@ local function cancelPendingMatch(cancelledBy)
 			removeFromQueue(other)
 			matchTimers[other] = nil
 			if other.Parent and not playerGMs[other] then
-				local gm = GameManager.new()
-				gm:init(remoteEvents)
-				gm.onMatchEnd = function()
-					playerGMs[other] = nil
-				end
-				gm:startMatch(other)
-				playerGMs[other] = gm
+				startAIMatch(other)
 			end
 		end)
 	end
 
-	-- 취소한 쪽: 큐에서 제거 (AI 게임 끝나면 로비로)
+	-- 취소한 쪽: 큐에서 제거
 	removeFromQueue(cancelledBy)
 	if matchTimers[cancelledBy] then
 		task.cancel(matchTimers[cancelledBy])
 		matchTimers[cancelledBy] = nil
 	end
-	-- 취소한 쪽에도 알림
 	if cancelledBy and cancelledBy.Parent then
 		remoteEvents.MatchCancelled:FireClient(cancelledBy, {})
 	end
@@ -180,7 +231,6 @@ remoteEvents.PreviewUpdate.OnServerEvent:Connect(function(player, spawnX, power,
 	if typeof(spawnX) ~= "number" then return end
 	local gm = playerGMs[player]
 	if not gm then return end
-	-- 상대에게 전달
 	local target = nil
 	if gm.player == player and gm.opponent then
 		target = gm.opponent
@@ -207,7 +257,7 @@ end)
 remoteEvents.RequestMatch.OnServerEvent:Connect(function(player)
 	-- 이미 큐에 있거나 pendingMatch 중이면 무시
 	if isInQueue(player) then return end
-	if pendingMatch and (pendingMatch.player1 == player or pendingMatch.player2 == player) then return end
+	if findPendingMatch(player) then return end
 
 	print("[Uncball] Player queued:", player.Name)
 	table.insert(matchQueue, player)
@@ -231,21 +281,13 @@ remoteEvents.RequestMatch.OnServerEvent:Connect(function(player)
 		-- 카운트다운 시작
 		startMatchCountdown(matchedWith, player)
 	else
-		-- 매칭 안 됨 → 10초 후 AI (큐에는 남아있음)
+		-- 매칭 안 됨 → 5초 후 AI (큐에는 남아있음)
 		matchTimers[player] = task.delay(Config.LOBBY.MATCH_TIMEOUT, function()
 			matchTimers[player] = nil
 			-- 아직 큐에 있으면 AI 매치 시작 (큐에는 유지!)
 			if isInQueue(player) and player.Parent and not playerGMs[player] then
 				print("[Uncball] AI match for", player.Name, "(still in queue)")
-				local gm = GameManager.new()
-				gm:init(remoteEvents)
-				gm.onMatchEnd = function()
-					playerGMs[player] = nil
-					-- 매치 끝나면 큐에서도 제거
-					removeFromQueue(player)
-				end
-				gm:startMatch(player)
-				playerGMs[player] = gm
+				startAIMatch(player)
 			end
 		end)
 	end
@@ -253,7 +295,7 @@ end)
 
 -- 매칭 취소
 remoteEvents.CancelMatchmaking.OnServerEvent:Connect(function(player)
-	if pendingMatch and (pendingMatch.player1 == player or pendingMatch.player2 == player) then
+	if findPendingMatch(player) then
 		cancelPendingMatch(player)
 	end
 end)
@@ -270,7 +312,6 @@ Players.PlayerRemoving:Connect(function(player)
 	-- 진행 중 매치 정리
 	local gm = playerGMs[player]
 	if gm then
-		-- PvP 매치에서 상대가 나가면 → 남은 플레이어 승리 처리
 		local remaining = nil
 		if gm.opponent == player then
 			remaining = gm.player
@@ -279,7 +320,6 @@ Players.PlayerRemoving:Connect(function(player)
 		end
 
 		if remaining and remaining.Parent then
-			-- 남은 플레이어에게 승리 알림 (상대 시점이면 점수 뒤집기)
 			local finalScores = gm.scores
 			if remaining == gm.opponent then
 				finalScores = { player = gm.scores.ai, ai = gm.scores.player }
@@ -299,7 +339,7 @@ Players.PlayerRemoving:Connect(function(player)
 	end
 
 	-- 대기 중 매치 취소
-	if pendingMatch and (pendingMatch.player1 == player or pendingMatch.player2 == player) then
+	if findPendingMatch(player) then
 		cancelPendingMatch(player)
 	end
 end)
@@ -311,7 +351,7 @@ local function hidePlayerCharacter(player)
 	local hrp = char:FindFirstChild("HumanoidRootPart")
 	if hrp then
 		hrp.Anchored = true
-		hrp.CFrame = CFrame.new(0, 500, 0) -- 경기장 한참 위
+		hrp.CFrame = CFrame.new(0, 500, 0)
 	end
 	local humanoid = char:FindFirstChildOfClass("Humanoid")
 	if humanoid then
@@ -333,13 +373,11 @@ end
 
 Players.PlayerAdded:Connect(function(player)
 	player.CharacterAdded:Connect(function(char)
-		-- 캐릭터 로드 후 즉시 숨기기
 		task.wait(0.1)
 		if not playerGMs[player] then
 			hidePlayerCharacter(player)
 		end
 	end)
-	-- 이미 캐릭터가 있으면 바로 숨기기
 	if player.Character then
 		hidePlayerCharacter(player)
 	end
@@ -358,4 +396,4 @@ for _, player in Players:GetPlayers() do
 	end)
 end
 
-print("[Uncball] Server initialized - lobby mode")
+print("[Uncball] Server initialized - multi-table lobby mode")

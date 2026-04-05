@@ -1,5 +1,8 @@
 local Config = {}
 
+-- 멀티 테이블
+Config.TABLE_SPACING = 100 -- 동시 매치 시 테이블 간 X 간격 (studs)
+
 -- 테이블
 Config.TABLE = {
 	WIDTH = 25,

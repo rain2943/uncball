@@ -32,6 +32,11 @@ function GameManager.new()
 		self.slotOwners[zoneNum] = {}
 	end
 
+	-- 멀티 테이블
+	self.tableOffset = Vector3.zero
+	self.tableModel = nil
+	self.slotPositions = {}
+
 	-- 테이블에 안착된 공 파트 목록
 	self.settledBalls = {}
 	-- 슬롯에 안 들어간 공 (테이블 위에 남아있음, 후속타로 밀어넣기 가능)
@@ -44,11 +49,17 @@ function GameManager.new()
 	return self
 end
 
-function GameManager:init(remotes)
+function GameManager:init(remotes, tableOffset: Vector3?)
 	self.remotes = remotes
+	self.tableOffset = tableOffset or Vector3.zero
 
-	-- AI 초기화 (테이블은 서버에서 이미 빌드됨)
-	self.ai = AIPlayer.new(TableBuilder.slotPositions)
+	-- 테이블 동적 생성
+	local model, slotPositions = TableBuilder.build(self.tableOffset)
+	self.tableModel = model
+	self.slotPositions = slotPositions
+
+	-- AI 초기화
+	self.ai = AIPlayer.new(self.slotPositions)
 
 	-- 타이머 + looseBall 체크 루프
 	task.spawn(function()
@@ -93,12 +104,14 @@ function GameManager:startMatch(player, opponent)
 	end
 
 	-- 매치 시작 알림
+	local offsetArr = { self.tableOffset.X, self.tableOffset.Y, self.tableOffset.Z }
 	local matchData = {
 		ballsPerPlayer = Config.GAME.BALLS_PER_PLAYER,
 		missions = self.missions,
 		opponentName = self.opponent and self.opponent.DisplayName or "AI",
 		opponentId = self.opponent and self.opponent.UserId or nil,
 		teamColor = "red",
+		tableOffset = offsetArr,
 	}
 
 	self.remotes.MatchStart:FireClient(player, matchData)
@@ -109,6 +122,7 @@ function GameManager:startMatch(player, opponent)
 			opponentName = player.DisplayName,
 			opponentId = player.UserId,
 			teamColor = "blue",
+			tableOffset = offsetArr,
 		}
 		self.remotes.MatchStart:FireClient(self.opponent, oppData)
 	end
@@ -252,9 +266,9 @@ function GameManager:_createBall(team: string, spawnX: number?): Part
 		1
 	)
 
-	-- 발사 위치 (spawnX로 좌우 위치 조정)
+	-- 발사 위치 (spawnX로 좌우 위치 조정, 테이블 오프셋 적용)
 	local spawnY = Config.TABLE.HEIGHT + Config.TABLE.THICKNESS / 2 + Config.BALL.RADIUS + 0.2
-	ball.Position = Vector3.new(spawnX or 0, spawnY, Config.LAUNCH.SPAWN_Z)
+	ball.Position = Vector3.new(spawnX or 0, spawnY, Config.LAUNCH.SPAWN_Z) + self.tableOffset
 
 	-- 먼저 workspace에 넣기 (물리 활성화)
 	ball.Parent = workspace
@@ -528,7 +542,7 @@ function GameManager:_checkSlotLanding(ball: Part): (number?, number?)
 	local bestZone, bestSlot = nil, nil
 
 	for zoneNum = 1, 3 do
-		for slotIdx, slotPos in TableBuilder.slotPositions[zoneNum] do
+		for slotIdx, slotPos in self.slotPositions[zoneNum] do
 			-- 이미 점유된 슬롯은 건너뛰기
 			if self.slotOwners[zoneNum][slotIdx] then
 				continue
@@ -875,14 +889,6 @@ function GameManager:_waitAllBallsSettled()
 				return true
 			end
 		end
-		for _, child in workspace:GetChildren() do
-			if child:IsA("Part") and child.Shape == Enum.PartType.Ball
-				and (child.Name == "PlayerBall" or child.Name == "AIBall")
-				and not child.Anchored
-				and child.AssemblyLinearVelocity.Magnitude > 0.4 then
-				return true
-			end
-		end
 		return false
 	end
 
@@ -939,13 +945,11 @@ function GameManager:_cleanupBalls()
 	end
 	self.looseBalls = {}
 
-	-- workspace에 남은 공 정리
-	for _, child in workspace:GetChildren() do
-		if child:IsA("Part") and child.Shape == Enum.PartType.Ball
-			and (child.Name == "PlayerBall" or child.Name == "AIBall") then
-			child:Destroy()
-		end
+	-- 테이블 모델 제거
+	if self.tableModel and self.tableModel.Parent then
+		self.tableModel:Destroy()
 	end
+	self.tableModel = nil
 end
 
 -- 양쪽 클라이언트에 이벤트 발신 헬퍼
@@ -1001,7 +1005,7 @@ function GameManager:_positionPlayer(player)
 
 	-- 테이블 옆 안전한 높이에 배치 (void kill 방지)
 	hrp.Anchored = true
-	hrp.CFrame = CFrame.new(0, Config.TABLE.HEIGHT + 10, Config.LAUNCH.SPAWN_Z - 5)
+	hrp.CFrame = CFrame.new(self.tableOffset.X, Config.TABLE.HEIGHT + 10, Config.LAUNCH.SPAWN_Z - 5 + self.tableOffset.Z)
 
 	-- 캐릭터 투명 + 충돌 제거
 	local function hideDescendants()

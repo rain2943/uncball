@@ -2,7 +2,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 
 local TableBuilder = {}
-TableBuilder.slotPositions = {}
 
 local BALL_DIAM = Config.BALL.RADIUS * 2
 local SLOT_GAP = BALL_DIAM + 0.15
@@ -18,7 +17,10 @@ local PLATE_THICKNESS = 0.2
 local PLATE_COLOR = Color3.fromRGB(242, 238, 232)
 local PLATE_RADIUS = 5.0 -- 모든 존 동일
 
-function TableBuilder.build()
+function TableBuilder.build(tableOffset: Vector3?)
+	local offset = tableOffset or Vector3.zero
+	local slotPositions = {}
+
 	local model = Instance.new("Model")
 	model.Name = "GameTable"
 	local tableTop = Config.TABLE.HEIGHT + Config.TABLE.THICKNESS / 2
@@ -27,7 +29,7 @@ function TableBuilder.build()
 	surface.Name = "Surface"
 	surface.Anchored = true
 	surface.Size = Vector3.new(Config.TABLE.WIDTH, Config.TABLE.THICKNESS, Config.TABLE.LENGTH)
-	surface.Position = Vector3.new(0, Config.TABLE.HEIGHT, 0)
+	surface.Position = Vector3.new(0, Config.TABLE.HEIGHT, 0) + offset
 	surface.Color = Config.TABLE.COLOR
 	surface.Material = Config.TABLE.MATERIAL
 	surface.TopSurface = Enum.SurfaceType.Smooth
@@ -38,9 +40,9 @@ function TableBuilder.build()
 	local wH, wT = Config.TABLE.WALL_HEIGHT, Config.TABLE.WALL_THICKNESS
 	local hW, hL = Config.TABLE.WIDTH / 2, Config.TABLE.LENGTH / 2
 	for _, w in ipairs({
-		{ "WallL", Vector3.new(wT, wH, Config.TABLE.LENGTH + wT * 2), Vector3.new(-hW - wT / 2, tableTop + wH / 2, 0) },
-		{ "WallR", Vector3.new(wT, wH, Config.TABLE.LENGTH + wT * 2), Vector3.new(hW + wT / 2, tableTop + wH / 2, 0) },
-		{ "WallF", Vector3.new(Config.TABLE.WIDTH + wT * 2, wH, wT), Vector3.new(0, tableTop + wH / 2, hL + wT / 2) },
+		{ "WallL", Vector3.new(wT, wH, Config.TABLE.LENGTH + wT * 2), Vector3.new(-hW - wT / 2, tableTop + wH / 2, 0) + offset },
+		{ "WallR", Vector3.new(wT, wH, Config.TABLE.LENGTH + wT * 2), Vector3.new(hW + wT / 2, tableTop + wH / 2, 0) + offset },
+		{ "WallF", Vector3.new(Config.TABLE.WIDTH + wT * 2, wH, wT), Vector3.new(0, tableTop + wH / 2, hL + wT / 2) + offset },
 	}) do
 		local p = Instance.new("Part")
 		p.Name = w[1]; p.Anchored = true; p.Size = w[2]; p.Position = w[3]
@@ -57,29 +59,27 @@ function TableBuilder.build()
 		local folder = Instance.new("Folder")
 		folder.Name = "Zone" .. zoneNum
 		folder.Parent = zonesFolder
-		TableBuilder.slotPositions[zoneNum] = {}
-		TableBuilder._buildTray(folder, zoneNum, zc, tableTop)
+		slotPositions[zoneNum] = {}
+		TableBuilder._buildTray(folder, zoneNum, zc, tableTop, offset, slotPositions)
 	end
 
 	model.Parent = workspace
-	return model
+	return model, slotPositions
 end
 
-function TableBuilder._buildTray(parent, zoneNum, zoneConfig, tableTop)
+function TableBuilder._buildTray(parent, zoneNum, zoneConfig, tableTop, offset, slotPositions)
 	local numSlots = zoneConfig.SLOTS
 	local numPosts = numSlots + 1
 	local centerZ = zoneConfig.Z_OFFSET
 	local postLineZ = centerZ
 
 	-- ===== 1) 반원판 (스트립 조합, 가림판 없음) =====
-	-- 직선변 = 포스트 라인 (Z = postLineZ)
-	-- 곡선 = -Z 방향 (플레이어 쪽)
 	local R = PLATE_RADIUS
 	local NUM_STRIPS = 10
 	local stripDepth = R / NUM_STRIPS
 
 	for s = 0, NUM_STRIPS - 1 do
-		local d = (s + 0.5) * stripDepth -- 직선변에서의 거리
+		local d = (s + 0.5) * stripDepth
 		local halfW = math.sqrt(math.max(R * R - d * d, 0))
 		if halfW < 0.2 then continue end
 
@@ -87,7 +87,7 @@ function TableBuilder._buildTray(parent, zoneNum, zoneConfig, tableTop)
 		strip.Name = "Plate_" .. zoneNum .. "_" .. s
 		strip.Anchored = true
 		strip.Size = Vector3.new(halfW * 2, POST_HEIGHT, stripDepth + 0.02)
-		strip.Position = Vector3.new(0, tableTop + POST_HEIGHT / 2, postLineZ - d)
+		strip.Position = Vector3.new(0, tableTop + POST_HEIGHT / 2, postLineZ - d) + offset
 		strip.Color = PLATE_COLOR
 		strip.Material = Enum.Material.SmoothPlastic
 		strip.CanCollide = true
@@ -110,7 +110,7 @@ function TableBuilder._buildTray(parent, zoneNum, zoneConfig, tableTop)
 		post.Name = "Post_" .. zoneNum .. "_" .. i
 		post.Anchored = true
 		post.Size = Vector3.new(POST_WIDTH, POST_HEIGHT, POST_DEPTH)
-		post.Position = Vector3.new(x, postY, postLineZ)
+		post.Position = Vector3.new(x, postY, postLineZ) + offset
 		post.Color = POST_COLOR
 		post.Material = Enum.Material.SmoothPlastic
 		post.CanCollide = true
@@ -118,18 +118,18 @@ function TableBuilder._buildTray(parent, zoneNum, zoneConfig, tableTop)
 		post.BottomSurface = Enum.SurfaceType.Smooth
 		post.Parent = parent
 
-		postPositions[i] = Vector3.new(x, tableTop + PLATE_THICKNESS, postLineZ)
+		postPositions[i] = Vector3.new(x, tableTop + PLATE_THICKNESS, postLineZ) + offset
 	end
 
 	-- ===== 3) 슬롯 위치 + 라벨 =====
 	for i = 1, numSlots do
 		local slotX = (postPositions[i].X + postPositions[i + 1].X) / 2
-		TableBuilder.slotPositions[zoneNum][i] = Vector3.new(slotX, tableTop + PLATE_THICKNESS, postLineZ)
+		slotPositions[zoneNum][i] = Vector3.new(slotX, tableTop + PLATE_THICKNESS + offset.Y, postLineZ + offset.Z)
 
 		local lbl = Instance.new("Part")
 		lbl.Anchored = true; lbl.Transparency = 1; lbl.CanCollide = false
 		lbl.Size = Vector3.new(0.1, 0.1, 0.1)
-		lbl.Position = Vector3.new(slotX, tableTop + POST_HEIGHT + 0.5, postLineZ - 1)
+		lbl.Position = Vector3.new(slotX, tableTop + POST_HEIGHT + 0.5 + offset.Y, postLineZ - 1 + offset.Z)
 		lbl.Parent = parent
 
 		local bb = Instance.new("BillboardGui")
@@ -152,7 +152,7 @@ function TableBuilder._buildTray(parent, zoneNum, zoneConfig, tableTop)
 	local nl = Instance.new("Part")
 	nl.Anchored = true; nl.Transparency = 1; nl.CanCollide = false
 	nl.Size = Vector3.new(0.1, 0.1, 0.1)
-	nl.Position = Vector3.new(0, tableTop + POST_HEIGHT + 0.8, postLineZ - PLATE_RADIUS * 0.45)
+	nl.Position = Vector3.new(0, tableTop + POST_HEIGHT + 0.8, postLineZ - PLATE_RADIUS * 0.45) + offset
 	nl.Parent = parent
 
 	local nbb = Instance.new("BillboardGui")

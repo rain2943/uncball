@@ -94,6 +94,7 @@ end
 
 -- 매치 상태 추적
 local inMatch = false
+local currentTableOffset = Vector3.zero
 
 -- 초기 상태: 로비 보이기, HUD 숨기기
 ui:hide()
@@ -146,6 +147,15 @@ end
 
 remoteEvents.MatchStart.OnClientEvent:Connect(function(data)
 	inMatch = true
+
+	-- 테이블 오프셋 설정
+	if data.tableOffset then
+		currentTableOffset = Vector3.new(data.tableOffset[1], data.tableOffset[2], data.tableOffset[3])
+	else
+		currentTableOffset = Vector3.zero
+	end
+	camera:setTableOffset(currentTableOffset)
+	launch:setTableOffset(currentTableOffset)
 
 	-- 매칭 팝업 닫기 (PvP 매치일 경우)
 	ui:hideMatchFoundPopup()
@@ -227,6 +237,8 @@ end)
 workspace.ChildAdded:Connect(function(child)
 	if child:IsA("Part") and child.Shape == Enum.PartType.Ball
 		and (child.Name == "PlayerBall" or child.Name == "AIBall") then
+		-- 내 테이블 근처 공만 추적 (다른 매치 공 무시)
+		if math.abs(child.Position.X - currentTableOffset.X) > 50 then return end
 		task.wait(0.1)
 		camera:trackBall(child)
 		attachCollisionSound(child)
@@ -251,6 +263,9 @@ remoteEvents.MatchEnd.OnClientEvent:Connect(function(data)
 	inMatch = false
 	launch:setEnabled(false)
 	destroyOppGuideDots()
+	currentTableOffset = Vector3.zero
+	camera:setTableOffset(Vector3.zero)
+	launch:setTableOffset(Vector3.zero)
 	-- 상대 퇴장 시 "Leave!" 표시
 	if data.disconnected then
 		ui:setOpponentName("Leave!")
@@ -342,7 +357,7 @@ local function updateOppGuide(spawnX: number, power: number, spin: number)
 	end
 
 	local spawnY = Config.TABLE.HEIGHT + Config.TABLE.THICKNESS / 2 + Config.BALL.RADIUS + 0.2
-	local spawnPos = Vector3.new(spawnX, spawnY, Config.LAUNCH.SPAWN_Z)
+	local spawnPos = Vector3.new(spawnX, spawnY, Config.LAUNCH.SPAWN_Z) + currentTableOffset
 	local currentPower = Config.LAUNCH.MIN_POWER + (Config.LAUNCH.MAX_POWER - Config.LAUNCH.MIN_POWER) * power
 
 	local mass = 2
@@ -384,7 +399,7 @@ remoteEvents.PreviewUpdate.OnClientEvent:Connect(function(spawnX, power, spin)
 		opponentPreview.Parent = workspace
 	end
 
-	opponentPreview.Position = Vector3.new(spawnX, spawnY, Config.LAUNCH.SPAWN_Z)
+	opponentPreview.Position = Vector3.new(spawnX, spawnY, Config.LAUNCH.SPAWN_Z) + currentTableOffset
 	-- 카메라도 따라감
 	camera:setLaunchFollowX(spawnX)
 

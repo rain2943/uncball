@@ -80,6 +80,9 @@ function LaunchController.new(remotes, uiController)
 	self.guideDots = {}
 	self.spawnY = Config.TABLE.HEIGHT + Config.TABLE.THICKNESS / 2 + Config.BALL.RADIUS + 0.2
 
+	-- 테이블 오프셋
+	self.tableOffset = Vector3.zero
+
 	-- PvP 프리뷰 전송 쓰로틀
 	self._lastPreviewSend = 0
 	self._lastSentX = nil
@@ -95,8 +98,12 @@ function LaunchController.new(remotes, uiController)
 	return self
 end
 
+function LaunchController:setTableOffset(offset: Vector3)
+	self.tableOffset = offset or Vector3.zero
+end
+
 function LaunchController:_getSpawnPos(): Vector3
-	return Vector3.new(self.spawnX, self.spawnY, Config.LAUNCH.SPAWN_Z)
+	return Vector3.new(self.spawnX, self.spawnY, Config.LAUNCH.SPAWN_Z) + self.tableOffset
 end
 
 -- ===== 프리뷰 + 가이드 =====
@@ -230,14 +237,15 @@ end
 
 function LaunchController:_screenToWorldPos(screenX: number, screenY: number): Vector3
 	local camera = workspace.CurrentCamera
+	local spawnY = self.spawnY + self.tableOffset.Y
 	local ray = camera:ScreenPointToRay(screenX, screenY)
 	if math.abs(ray.Direction.Y) < 0.001 then
-		return Vector3.new(0, self.spawnY, Config.LAUNCH.SPAWN_Z)
+		return Vector3.new(self.tableOffset.X, spawnY, Config.LAUNCH.SPAWN_Z + self.tableOffset.Z)
 	end
-	local t = (self.spawnY - ray.Origin.Y) / ray.Direction.Y
+	local t = (spawnY - ray.Origin.Y) / ray.Direction.Y
 	local worldX = ray.Origin.X + ray.Direction.X * t
 	local worldZ = ray.Origin.Z + ray.Direction.Z * t
-	return Vector3.new(worldX, self.spawnY, worldZ)
+	return Vector3.new(worldX, spawnY, worldZ)
 end
 
 -- ===== 공 클릭 감지 =====
@@ -388,7 +396,7 @@ function LaunchController:_setupInput()
 
 			local worldPos = self:_screenToWorldPos(input.Position.X, input.Position.Y)
 			local xRange = Config.LAUNCH.SPAWN_X_RANGE
-			self.spawnX = math.clamp(worldPos.X, -xRange, xRange)
+			self.spawnX = math.clamp(worldPos.X - self.tableOffset.X, -xRange, xRange)
 			if self.previewBall then
 				self.previewBall.Position = self:_getSpawnPos()
 			end
