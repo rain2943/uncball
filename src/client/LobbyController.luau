@@ -391,7 +391,7 @@ function LobbyController:_loadCharacter()
 		end
 	end
 
-	-- 모델 위치 (Y=2로 낮춰서 머리+액세서리가 뷰포트 안에 들어오게)
+	-- 모델 원점
 	clone:PivotTo(CFrame.new(0, 0, 0))
 
 	-- HumanoidRootPart 외에는 투명도 복원 (이미 숨겨졌을 수 있음)
@@ -412,11 +412,12 @@ function LobbyController:_loadCharacter()
 	-- 카메라 새로 생성 (ViewportFrame 카메라 갱신 보장)
 	if self.vpCam then self.vpCam:Destroy() end
 	local newCam = Instance.new("Camera")
-	-- PC/모바일 공용: 전신 풀샷 (머리 액세서리 + 발 여유)
-	newCam.FieldOfView = 28
+	-- PC/모바일 공용: 전신 풀샷
+	-- lookAt을 살짝 위로 → 머리 위 여유 확보 + 전신 보임
+	newCam.FieldOfView = 22
 	newCam.CFrame = CFrame.lookAt(
-		Vector3.new(0.2, 0.3, -13),
-		Vector3.new(0, 0.0, 0)
+		Vector3.new(0.15, 0.3, -16),
+		Vector3.new(0, 0.3, 0)
 	)
 	newCam.Parent = self.charViewport
 	self.charViewport.CurrentCamera = newCam
