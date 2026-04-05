@@ -1225,12 +1225,19 @@ function UIController:setTurn(isPlayerTurn: boolean, isBonus: boolean?)
 			if panelStroke then panelStroke.Color = myColor end
 		end
 	else
-		-- 상대 턴: 내 팀 색 반대로 표시
+		-- 상대 턴
 		local oppColor = self._myTeam == "blue" and Color3.fromRGB(220, 50, 60) or Color3.fromRGB(50, 90, 210)
-		turnText.Text = self._opponentName or "AI"
-		turnText.TextColor3 = oppColor
-		panel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-		if panelStroke then panelStroke.Color = oppColor end
+		if isBonus then
+			turnText.Text = "BONUS TURN!"
+			turnText.TextColor3 = Color3.fromRGB(255, 180, 30)
+			panel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			if panelStroke then panelStroke.Color = Color3.fromRGB(255, 180, 30) end
+		else
+			turnText.Text = self._opponentName or "AI"
+			turnText.TextColor3 = oppColor
+			panel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			if panelStroke then panelStroke.Color = oppColor end
+		end
 	end
 
 	-- ===== 턴 타이머 (내 턴 + 상대 턴 모두 표시) =====
