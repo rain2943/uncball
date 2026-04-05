@@ -6,7 +6,7 @@ local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Co
 local NUM_GUIDE_DOTS = 20
 local GUIDE_DOT_SIZE = 0.22
 local PULLBACK_PX_FOR_MAX = 100 -- 조금만 당겨도 MAX (매우 민감)
-local SPIN_SENSITIVITY = 0.012 -- 좌우 조금만 움직여도 크게 꺾임
+local SPIN_SENSITIVITY = 0.006 -- 정밀 스핀 컨트롤
 local TIMING_SPEED_MIN = 12 -- 파워 0%일 때 속도
 local TIMING_SPEED_MAX = 45 -- 파워 100%일 때 속도
 
@@ -175,7 +175,7 @@ function LaunchController:_updateGuide()
 
 	-- 실제 물리 파라미터
 	local mass = 2
-	local lateralAccel = self.spin * Config.SPIN.MAX_LATERAL_FORCE / mass
+	local lateralAccel = self.spin * Config.SPIN.MAX_LATERAL_FORCE / mass * 2.5 -- 가이드 커브 과장 (실제 물리보다 크게 보여줌)
 	local inclineDecel = Config.INCLINE_FORCE -- -Z 방향 감속
 
 	-- 가이드 길이: 파워에 비례하되 짧게 (정밀 조정 가능하게)
@@ -354,7 +354,14 @@ function LaunchController:_setupInput()
 			local pullback = math.max(dy - 30, 0)
 			self.power = math.clamp(pullback / PULLBACK_PX_FOR_MAX, 0, 1)
 			-- 가로: 스핀 (스크린 X 기준, AIMING 시작점 대비)
+			-- 데드존 20px: 좌우 미세 흔들림 무시
 			local screenDx = input.Position.X - self.aimStartPos.X
+			local deadzone = 20
+			if math.abs(screenDx) < deadzone then
+				screenDx = 0
+			else
+				screenDx = screenDx - (screenDx > 0 and deadzone or -deadzone)
+			end
 			self.spin = math.clamp(-screenDx * SPIN_SENSITIVITY, -1, 1)
 		else
 			-- 당기지 않은 상태 → 위치 조정 모드
@@ -411,6 +418,11 @@ function LaunchController:_launch()
 	self:_showPreview(false)
 	self:_hideGuide()
 	self.state = "IDLE"
+
+	-- 턴 타이머 즉시 숨기기
+	if self.ui and self.ui.hideTurnTimer then
+		self.ui:hideTurnTimer()
+	end
 
 	-- 타이밍 커서 리셋
 	self.timingPos = 1

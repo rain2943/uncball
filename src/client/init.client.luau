@@ -2,12 +2,25 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 
 local player = Players.LocalPlayer
 
 -- 기본 Roblox UI 전부 숨기기
 pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false) end)
+
+-- 리스폰(캐릭터 리셋) 버튼 비활성화
+task.spawn(function()
+	-- SetCore는 로드 타이밍에 따라 실패할 수 있어서 반복 시도
+	for _ = 1, 10 do
+		local ok = pcall(function()
+			StarterGui:SetCore("ResetButtonCallback", false)
+		end)
+		if ok then break end
+		task.wait(0.5)
+	end
+end)
 
 -- 기본 캐릭터 컨트롤 비활성화
 task.spawn(function()
@@ -25,6 +38,7 @@ end)
 local UIController = require(script:WaitForChild("UIController"))
 local LaunchController = require(script:WaitForChild("LaunchController"))
 local CameraController = require(script:WaitForChild("CameraController"))
+local LobbyController = require(script:WaitForChild("LobbyController"))
 
 -- 리모트 이벤트 대기
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -39,6 +53,49 @@ local ui = UIController.new()
 local camera = CameraController.new()
 local launch = LaunchController.new(remoteEvents, ui)
 launch.cameraController = camera
+local lobby = LobbyController.new()
+
+-- === 암전 트랜지션 ===
+local fadeGui = Instance.new("ScreenGui")
+fadeGui.Name = "FadeScreen"
+fadeGui.ResetOnSpawn = false
+fadeGui.DisplayOrder = 100
+fadeGui.IgnoreGuiInset = true
+fadeGui.Parent = player:WaitForChild("PlayerGui")
+
+local fadeFrame = Instance.new("Frame")
+fadeFrame.Name = "Fade"
+fadeFrame.Size = UDim2.new(1, 0, 1, 0)
+fadeFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+fadeFrame.BackgroundTransparency = 1
+fadeFrame.BorderSizePixel = 0
+fadeFrame.ZIndex = 100
+fadeFrame.Parent = fadeGui
+
+local function fadeToBlack(duration: number?)
+	duration = duration or 0.5
+	fadeFrame.BackgroundTransparency = 1
+	local tween = TweenService:Create(fadeFrame, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+		BackgroundTransparency = 0,
+	})
+	tween:Play()
+	tween.Completed:Wait()
+end
+
+local function fadeFromBlack(duration: number?)
+	duration = duration or 0.5
+	fadeFrame.BackgroundTransparency = 0
+	local tween = TweenService:Create(fadeFrame, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 1,
+	})
+	tween:Play()
+	tween.Completed:Wait()
+end
+
+-- 초기 상태: 로비 보이기, HUD 숨기기
+ui:hide()
+lobby:show()
+camera:enterLobbyView()
 
 -- === SFX ===
 local SFX = {
@@ -64,12 +121,9 @@ end
 local function attachCollisionSound(ball: Part)
 	local lastHitTime = 0
 	ball.Touched:Connect(function(other)
-		-- 바닥(테이블) 접촉은 무시 — 벽/공/포스트만
 		if other.Name == "TableTop" or other.Name == "TableFloor" then return end
-		-- 디바운스: 0.12초 간격
 		local now = tick()
 		if now - lastHitTime < 0.12 then return end
-		-- 충분한 충격일 때만
 		local vel = ball.AssemblyLinearVelocity.Magnitude
 		if vel < 0.8 then return end
 		lastHitTime = now
@@ -78,16 +132,27 @@ local function attachCollisionSound(ball: Part)
 	end)
 end
 
+-- === 로비 → 매치 플로우 ===
+
+-- PLAY 버튼 콜백: 서버에 매칭 요청
+lobby.onPlayCallback = function()
+	remoteEvents.RequestMatch:FireServer()
+end
+
 -- === 이벤트 핸들러 ===
 
 remoteEvents.MatchStart.OnClientEvent:Connect(function(data)
-	-- 이전 매치 결과 화면 숨기기
+	-- 매칭 팝업 닫기 (PvP 매치일 경우)
+	ui:hideMatchFoundPopup()
+
+	-- HUD 즉시 초기화 (로비 UI가 위에 덮고 있으므로 안 보임)
+	ui:show()
 	ui:hideResult()
 	ui:updateScores(0, 0)
 	ui:updateRemainingBalls(data.ballsPerPlayer, data.ballsPerPlayer)
-	ui:updateTimer(data.matchTime)
+	ui._opponentName = data.opponentName or "AI"
+	ui._opponentId = data.opponentId
 
-	-- 미션 카드 초기화
 	if data.missions then
 		ui:initMissions(data.missions)
 	end
@@ -102,12 +167,19 @@ remoteEvents.MatchStart.OnClientEvent:Connect(function(data)
 		bgm.Parent = workspace
 		bgm:Play()
 	end
+
+	-- 암전 트랜지션 (UI 전환은 이미 완료, 암전 중 로비만 숨김)
+	task.spawn(function()
+		fadeToBlack(0.4)
+		lobby:hide()
+		task.wait(0.15)
+		fadeFromBlack(0.6)
+	end)
 end)
 
-remoteEvents.TurnChanged.OnClientEvent:Connect(function(isPlayerTurn, _remainingBalls)
-	ui:setTurn(isPlayerTurn)
+remoteEvents.TurnChanged.OnClientEvent:Connect(function(isPlayerTurn, _remainingBalls, isBonus)
+	ui:setTurn(isPlayerTurn, isBonus)
 	launch:setEnabled(isPlayerTurn)
-	-- 플레이어/AI 모두 발사 뷰로 전환 (공 나가는 걸 볼 수 있게)
 	camera:enterLaunchView()
 	if isPlayerTurn then
 		playSound("rbxassetid://127421479045055", 0.5)
@@ -116,30 +188,28 @@ end)
 
 remoteEvents.GameStateUpdate.OnClientEvent:Connect(function(data)
 	ui:updateScores(data.scores.player, data.scores.ai)
-	ui:updateTimer(data.timer)
 	ui:updateRemainingBalls(data.remainingBalls.player, data.remainingBalls.ai)
 	if data.missions then
 		ui:updateMissions(data.missions, data.playerLetters)
 	end
 end)
 
--- BallCreated 이벤트
 remoteEvents.BallCreated.OnClientEvent:Connect(function(ball)
 	if ball and ball.Parent then
 		camera:trackBall(ball)
 		attachCollisionSound(ball)
-		-- AI 공 발사음 (플레이어 공은 LaunchController에서 즉시 재생)
+		-- 공 발사됨 → 턴 타이머 숨기기
+		ui:hideTurnTimer()
 		if ball.Name == "AIBall" then
 			playSound(SFX.LAUNCH, 0.5)
 		end
 	end
 end)
 
--- workspace에 공이 추가되면 직접 감지 (이벤트 실패 대비)
 workspace.ChildAdded:Connect(function(child)
 	if child:IsA("Part") and child.Shape == Enum.PartType.Ball
 		and (child.Name == "PlayerBall" or child.Name == "AIBall") then
-		task.wait(0.1) -- 물리 안정화
+		task.wait(0.1)
 		camera:trackBall(child)
 		attachCollisionSound(child)
 	end
@@ -162,6 +232,37 @@ end)
 remoteEvents.MatchEnd.OnClientEvent:Connect(function(data)
 	launch:setEnabled(false)
 	ui:showMatchResult(data.winner, data.scores)
+
+	-- 5초 후 암전 → 로비 복귀
+	task.delay(4.5, function()
+		fadeToBlack(0.5)
+
+		ui:hide()
+		lobby:show()
+		camera:enterLobbyView()
+
+		-- BGM 정지
+		local bgm = workspace:FindFirstChild("BGM")
+		if bgm then bgm:Destroy() end
+
+		task.wait(0.2)
+		fadeFromBlack(0.6)
+	end)
 end)
 
-print("[Uncball] Client initialized")
+-- === 매칭 팝업 ===
+
+-- 매칭 발견 → 팝업 (게임 중이든 로비든)
+remoteEvents.MatchFound.OnClientEvent:Connect(function(data)
+	ui:showMatchFoundPopup(data.opponentName, data.countdown or 5, function()
+		-- 취소 버튼 콜백
+		remoteEvents.CancelMatchmaking:FireServer()
+	end)
+end)
+
+-- 매칭 취소됨 (상대가 취소 또는 내가 취소)
+remoteEvents.MatchCancelled.OnClientEvent:Connect(function()
+	ui:hideMatchFoundPopup()
+end)
+
+print("[Uncball] Client initialized - lobby mode")

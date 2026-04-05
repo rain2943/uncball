@@ -9,6 +9,28 @@ UIController.__index = UIController
 local RED = Config.BALL.COLORS.RED
 local BLUE = Config.BALL.COLORS.BLUE
 
+-- 시뮬레이터 UI 스타일 상수
+local FONT_TITLE = Enum.Font.FredokaOne
+local FONT_BOLD = Enum.Font.FredokaOne
+local FONT_MEDIUM = Enum.Font.GothamBold
+local CORNER_RADIUS = 14
+
+local function addStroke(parent: Instance, color: Color3?, thickness: number?)
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = color or Color3.fromRGB(30, 30, 50)
+	stroke.Thickness = thickness or 2
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+	stroke.Parent = parent
+	return stroke
+end
+
+local function addCorner(parent: Instance, radius: number?)
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, radius or CORNER_RADIUS)
+	corner.Parent = parent
+	return corner
+end
+
 function UIController.new()
 	local self = setmetatable({}, UIController)
 	self.gui = nil
@@ -35,64 +57,145 @@ function UIController:_createUI()
 	self:_createMissionPanel(gui)
 end
 
--- ===== 상단: 타이틀 + 버튼 =====
+-- ===== 상단: 턴 인디케이터 + 볼 카운트 + 턴 타이머 =====
 function UIController:_createTopBar(gui)
-	local topBar = Instance.new("Frame")
-	topBar.Name = "TopBar"
-	topBar.Size = UDim2.new(1, 0, 0, 36)
-	topBar.Position = UDim2.new(0, 0, 0, 4)
-	topBar.BackgroundTransparency = 1
-	topBar.Parent = gui
+	self._playerBalls = Config.GAME.BALLS_PER_PLAYER
+	self._aiBalls = Config.GAME.BALLS_PER_PLAYER
+	self._opponentName = "AI"
+	local maxBalls = Config.GAME.BALLS_PER_PLAYER
+	local DOT_SIZE = 18
+	local DOT_GAP = 5
 
-	-- 타이틀
-	local title = Instance.new("TextLabel")
-	title.Size = UDim2.new(0.4, 0, 1, 0)
-	title.Position = UDim2.new(0.3, 0, 0, 0)
-	title.BackgroundTransparency = 1
-	title.Text = "uncball"
-	title.TextColor3 = Color3.fromRGB(50, 80, 180)
-	title.TextScaled = true
-	title.Font = Enum.Font.GothamBlack
-	title.Parent = topBar
+	-- ===== 1) 턴 패널 (페이드 인/아웃) =====
+	local turnPanel = Instance.new("Frame")
+	turnPanel.Name = "TurnPanel"
+	turnPanel.Size = UDim2.new(0, 300, 0, 80)
+	turnPanel.Position = UDim2.new(0.5, -150, 0, 10)
+	turnPanel.BackgroundColor3 = Color3.fromRGB(40, 42, 55)
+	turnPanel.BackgroundTransparency = 0.08
+	turnPanel.BorderSizePixel = 0
+	turnPanel.Visible = false
+	turnPanel.Parent = gui
+	addCorner(turnPanel, 16)
+	addStroke(turnPanel, Color3.fromRGB(25, 28, 40), 3)
 
-	-- 게임 타이머 (상단 중앙, 크게)
-	local timer = Instance.new("TextLabel")
-	timer.Name = "Timer"
-	timer.Size = UDim2.new(0.2, 0, 0, 32)
-	timer.Position = UDim2.new(0.4, 0, 0, 38)
-	timer.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-	timer.BackgroundTransparency = 0.2
-	timer.Text = "03:00"
-	timer.TextColor3 = Color3.fromRGB(255, 255, 255)
-	timer.TextScaled = true
-	timer.Font = Enum.Font.GothamBold
-	timer.BorderSizePixel = 0
-	timer.Parent = gui
+	-- 턴 텍스트
+	local turnText = Instance.new("TextLabel")
+	turnText.Name = "TurnText"
+	turnText.Size = UDim2.new(1, -16, 0, 30)
+	turnText.Position = UDim2.new(0, 8, 0, 6)
+	turnText.BackgroundTransparency = 1
+	turnText.Text = "YOUR TURN"
+	turnText.TextColor3 = Color3.fromRGB(255, 255, 255)
+	turnText.Font = FONT_TITLE
+	turnText.TextScaled = true
+	turnText.ZIndex = 2
+	turnText.Parent = turnPanel
+	addStroke(turnText, Color3.fromRGB(0, 0, 0), 2)
 
-	local timerCorner = Instance.new("UICorner")
-	timerCorner.CornerRadius = UDim.new(0, 8)
-	timerCorner.Parent = timer
+	-- 볼 도트 컨테이너 (패널 내부 하단, 중앙 정렬)
+	local dotsContainer = Instance.new("Frame")
+	dotsContainer.Name = "DotsContainer"
+	dotsContainer.Size = UDim2.new(1, -20, 0, DOT_SIZE + 4)
+	dotsContainer.Position = UDim2.new(0, 10, 0, 40)
+	dotsContainer.BackgroundTransparency = 1
+	dotsContainer.Parent = turnPanel
 
-	self.elements.timer = timer
+	-- 플레이어 볼 도트 (빨강)
+	local playerDots = Instance.new("Frame")
+	playerDots.Name = "PlayerDots"
+	playerDots.Size = UDim2.new(1, 0, 1, 0)
+	playerDots.BackgroundTransparency = 1
+	playerDots.Parent = dotsContainer
 
-	-- 턴 타이머 (게임 타이머 아래)
+	local pLayout = Instance.new("UIListLayout")
+	pLayout.FillDirection = Enum.FillDirection.Horizontal
+	pLayout.Padding = UDim.new(0, DOT_GAP)
+	pLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	pLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	pLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	pLayout.Parent = playerDots
+
+	for i = 1, maxBalls do
+		local dot = Instance.new("Frame")
+		dot.Name = "D" .. i
+		dot.LayoutOrder = i
+		dot.Size = UDim2.new(0, DOT_SIZE, 0, DOT_SIZE)
+		dot.BackgroundColor3 = Config.BALL.COLORS.RED
+		dot.BackgroundTransparency = 0
+		dot.BorderSizePixel = 0
+		dot.ZIndex = 2
+		dot.Parent = playerDots
+		addCorner(dot, DOT_SIZE / 2)
+		addStroke(dot, Color3.fromRGB(160, 30, 40), 2)
+	end
+
+	-- AI 볼 도트 (파랑, 같은 컨테이너에 겹침 — 한쪽만 보임)
+	local aiDots = Instance.new("Frame")
+	aiDots.Name = "AIDots"
+	aiDots.Size = UDim2.new(1, 0, 1, 0)
+	aiDots.BackgroundTransparency = 1
+	aiDots.Visible = false
+	aiDots.Parent = dotsContainer
+
+	local aLayout = Instance.new("UIListLayout")
+	aLayout.FillDirection = Enum.FillDirection.Horizontal
+	aLayout.Padding = UDim.new(0, DOT_GAP)
+	aLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	aLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	aLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	aLayout.Parent = aiDots
+
+	for i = 1, maxBalls do
+		local dot = Instance.new("Frame")
+		dot.Name = "D" .. i
+		dot.LayoutOrder = i
+		dot.Size = UDim2.new(0, DOT_SIZE, 0, DOT_SIZE)
+		dot.BackgroundColor3 = Config.BALL.COLORS.BLUE
+		dot.BackgroundTransparency = 0
+		dot.BorderSizePixel = 0
+		dot.ZIndex = 2
+		dot.Parent = aiDots
+		addCorner(dot, DOT_SIZE / 2)
+		addStroke(dot, Color3.fromRGB(30, 55, 160), 2)
+	end
+
+	-- 남은 공 카운트 텍스트 (도트 옆)
+	local ballCountText = Instance.new("TextLabel")
+	ballCountText.Name = "BallCount"
+	ballCountText.Size = UDim2.new(1, 0, 0, 16)
+	ballCountText.Position = UDim2.new(0, 0, 1, 0)
+	ballCountText.BackgroundTransparency = 1
+	ballCountText.Text = "10 / 10"
+	ballCountText.TextColor3 = Color3.fromRGB(200, 200, 210)
+	ballCountText.Font = FONT_BOLD
+	ballCountText.TextSize = 12
+	ballCountText.ZIndex = 2
+	ballCountText.Parent = dotsContainer
+
+	self.elements.turnPanel = turnPanel
+	self.elements.turnText = turnText
+	self.elements.playerDotRow = playerDots
+	self.elements.aiDotRow = aiDots
+	self.elements.ballCountText = ballCountText
+
+	-- ===== 2) 턴 타이머 (독립, 상단 중앙 고정) =====
 	local turnTimer = Instance.new("TextLabel")
 	turnTimer.Name = "TurnTimer"
-	turnTimer.Size = UDim2.new(0.12, 0, 0, 22)
-	turnTimer.Position = UDim2.new(0.44, 0, 0, 72)
-	turnTimer.BackgroundColor3 = Color3.fromRGB(200, 60, 50)
-	turnTimer.BackgroundTransparency = 0.2
-	turnTimer.Text = "10"
+	turnTimer.Size = UDim2.new(0, 70, 0, 32)
+	turnTimer.Position = UDim2.new(0.5, -35, 0, 98)
+	turnTimer.BackgroundColor3 = Color3.fromRGB(40, 42, 55)
+	turnTimer.BackgroundTransparency = 0.08
+	turnTimer.Text = "30"
 	turnTimer.TextColor3 = Color3.fromRGB(255, 255, 255)
 	turnTimer.TextScaled = true
-	turnTimer.Font = Enum.Font.GothamBlack
+	turnTimer.Font = FONT_BOLD
 	turnTimer.BorderSizePixel = 0
 	turnTimer.Visible = false
-	turnTimer.Parent = gui
-
-	local turnCorner = Instance.new("UICorner")
-	turnCorner.CornerRadius = UDim.new(0, 6)
-	turnCorner.Parent = turnTimer
+	turnTimer.ZIndex = 3
+	turnTimer.Parent = gui -- gui에 직접 (패널 밖!)
+	addCorner(turnTimer, 10)
+	addStroke(turnTimer, Color3.fromRGB(25, 28, 40), 2)
 
 	self.elements.turnTimer = turnTimer
 end
@@ -109,15 +212,18 @@ function UIController:_createScoreBoard(gui)
 	-- 플레이어(레드) 점수 박스 — 왼쪽
 	local redBox = Instance.new("Frame")
 	redBox.Name = "RedScoreBox"
-	redBox.Size = UDim2.new(0.44, 0, 1, 0)
+	redBox.Size = UDim2.new(0.43, 0, 1, 0)
 	redBox.Position = UDim2.new(0, 0, 0, 0)
-	redBox.BackgroundColor3 = Color3.fromRGB(160, 35, 45)
+	redBox.BackgroundColor3 = Color3.fromRGB(220, 55, 65)
 	redBox.BorderSizePixel = 0
 	redBox.Parent = scoreRow
+	addCorner(redBox, CORNER_RADIUS)
+	addStroke(redBox, Color3.fromRGB(160, 30, 40), 2)
 
-	local redCorner = Instance.new("UICorner")
-	redCorner.CornerRadius = UDim.new(0, 10)
-	redCorner.Parent = redBox
+	local redGrad = Instance.new("UIGradient")
+	redGrad.Color = ColorSequence.new(Color3.fromRGB(230, 65, 75), Color3.fromRGB(190, 40, 50))
+	redGrad.Rotation = 90
+	redGrad.Parent = redBox
 
 	-- 이름
 	local redName = Instance.new("TextLabel")
@@ -127,9 +233,10 @@ function UIController:_createScoreBoard(gui)
 	redName.Text = Players.LocalPlayer.DisplayName
 	redName.TextColor3 = Color3.fromRGB(255, 255, 255)
 	redName.TextScaled = true
-	redName.Font = Enum.Font.GothamBold
+	redName.Font = FONT_BOLD
 	redName.TextXAlignment = Enum.TextXAlignment.Left
 	redName.Parent = redBox
+	addStroke(redName, Color3.fromRGB(100, 20, 25), 2)
 
 	-- 점수
 	local redScore = Instance.new("TextLabel")
@@ -140,23 +247,23 @@ function UIController:_createScoreBoard(gui)
 	redScore.Text = "0"
 	redScore.TextColor3 = Color3.fromRGB(255, 255, 255)
 	redScore.TextScaled = true
-	redScore.Font = Enum.Font.GothamBlack
+	redScore.Font = FONT_BOLD
 	redScore.Parent = redBox
+	addStroke(redScore, Color3.fromRGB(100, 20, 25), 2)
 	self.elements.redScore = redScore
 
-	-- VS 뱃지 — 중앙
+	-- VS 뱃지 — 중앙 (턴 인디케이터와 동일 스타일)
 	local vsBadge = Instance.new("Frame")
 	vsBadge.Name = "VSBadge"
-	vsBadge.Size = UDim2.new(0.1, 0, 0.7, 0)
-	vsBadge.Position = UDim2.new(0.45, 0, 0.15, 0)
-	vsBadge.BackgroundColor3 = Color3.fromRGB(50, 55, 65)
+	vsBadge.Size = UDim2.new(0, 50, 0, 34)
+	vsBadge.Position = UDim2.new(0.5, -25, 0.5, -17)
+	vsBadge.BackgroundColor3 = Color3.fromRGB(50, 55, 70)
+	vsBadge.BackgroundTransparency = 0.1
 	vsBadge.BorderSizePixel = 0
 	vsBadge.ZIndex = 2
 	vsBadge.Parent = scoreRow
-
-	local vsCorner = Instance.new("UICorner")
-	vsCorner.CornerRadius = UDim.new(0, 8)
-	vsCorner.Parent = vsBadge
+	addCorner(vsBadge, 12)
+	addStroke(vsBadge, Color3.fromRGB(30, 35, 50), 3)
 
 	local vsText = Instance.new("TextLabel")
 	vsText.Size = UDim2.new(1, 0, 1, 0)
@@ -164,22 +271,26 @@ function UIController:_createScoreBoard(gui)
 	vsText.Text = "VS"
 	vsText.TextColor3 = Color3.fromRGB(255, 255, 255)
 	vsText.TextScaled = true
-	vsText.Font = Enum.Font.GothamBlack
+	vsText.Font = FONT_BOLD
 	vsText.ZIndex = 2
 	vsText.Parent = vsBadge
+	addStroke(vsText, Color3.fromRGB(20, 20, 40), 2)
 
 	-- AI(블루) 점수 박스 — 오른쪽
 	local blueBox = Instance.new("Frame")
 	blueBox.Name = "BlueScoreBox"
-	blueBox.Size = UDim2.new(0.44, 0, 1, 0)
-	blueBox.Position = UDim2.new(0.56, 0, 0, 0)
-	blueBox.BackgroundColor3 = Color3.fromRGB(40, 70, 180)
+	blueBox.Size = UDim2.new(0.43, 0, 1, 0)
+	blueBox.Position = UDim2.new(0.57, 0, 0, 0)
+	blueBox.BackgroundColor3 = Color3.fromRGB(50, 100, 220)
 	blueBox.BorderSizePixel = 0
 	blueBox.Parent = scoreRow
+	addCorner(blueBox, CORNER_RADIUS)
+	addStroke(blueBox, Color3.fromRGB(30, 60, 160), 2)
 
-	local blueCorner = Instance.new("UICorner")
-	blueCorner.CornerRadius = UDim.new(0, 10)
-	blueCorner.Parent = blueBox
+	local blueGrad = Instance.new("UIGradient")
+	blueGrad.Color = ColorSequence.new(Color3.fromRGB(60, 110, 235), Color3.fromRGB(40, 80, 190))
+	blueGrad.Rotation = 90
+	blueGrad.Parent = blueBox
 
 	-- 점수
 	local blueScore = Instance.new("TextLabel")
@@ -190,8 +301,9 @@ function UIController:_createScoreBoard(gui)
 	blueScore.Text = "0"
 	blueScore.TextColor3 = Color3.fromRGB(255, 255, 255)
 	blueScore.TextScaled = true
-	blueScore.Font = Enum.Font.GothamBlack
+	blueScore.Font = FONT_BOLD
 	blueScore.Parent = blueBox
+	addStroke(blueScore, Color3.fromRGB(20, 40, 120), 2)
 
 	-- 이름
 	local blueName = Instance.new("TextLabel")
@@ -201,9 +313,10 @@ function UIController:_createScoreBoard(gui)
 	blueName.Text = "AI"
 	blueName.TextColor3 = Color3.fromRGB(255, 255, 255)
 	blueName.TextScaled = true
-	blueName.Font = Enum.Font.GothamBold
+	blueName.Font = FONT_BOLD
 	blueName.TextXAlignment = Enum.TextXAlignment.Right
 	blueName.Parent = blueBox
+	addStroke(blueName, Color3.fromRGB(20, 40, 120), 2)
 	self.elements.blueScore = blueScore
 end
 
@@ -350,65 +463,49 @@ function UIController:_createBallDots(parent, count, color)
 	end
 end
 
--- ===== 턴 인디케이터 =====
-function UIController:_createTurnIndicator(gui)
-	local turnLabel = Instance.new("TextLabel")
-	turnLabel.Name = "TurnLabel"
-	turnLabel.Size = UDim2.new(0.55, 0, 0, 30)
-	turnLabel.Position = UDim2.new(0.225, 0, 0, 108)
-	turnLabel.BackgroundColor3 = Color3.fromRGB(160, 35, 45)
-	turnLabel.BackgroundTransparency = 0.15
-	turnLabel.Text = "YOUR TURN - TAP TO SHOOT"
-	turnLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	turnLabel.TextScaled = true
-	turnLabel.Font = Enum.Font.GothamBold
-	turnLabel.BorderSizePixel = 0
-	turnLabel.Visible = false
-	turnLabel.Parent = gui
-
-	local turnCorner = Instance.new("UICorner")
-	turnCorner.CornerRadius = UDim.new(0, 8)
-	turnCorner.Parent = turnLabel
-
-	self.elements.turnLabel = turnLabel
+-- ===== 턴 인디케이터 (TopBar에 통합됨) =====
+function UIController:_createTurnIndicator(_gui)
+	-- 턴 인디케이터는 _createTopBar에서 생성
 end
 
 -- ===== 매치 결과 화면 =====
 function UIController:_createResultScreen(gui)
 	local resultFrame = Instance.new("Frame")
 	resultFrame.Name = "ResultFrame"
-	resultFrame.Size = UDim2.new(0.7, 0, 0.25, 0)
-	resultFrame.Position = UDim2.new(0.15, 0, 0.38, 0)
-	resultFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-	resultFrame.BackgroundTransparency = 0.1
+	resultFrame.Size = UDim2.new(0, 350, 0, 160)
+	resultFrame.Position = UDim2.new(0.5, -175, 0.5, -80)
+	resultFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	resultFrame.BackgroundTransparency = 0.03
 	resultFrame.BorderSizePixel = 0
 	resultFrame.Visible = false
+	resultFrame.ZIndex = 20
 	resultFrame.Parent = gui
-
-	local resultCorner = Instance.new("UICorner")
-	resultCorner.CornerRadius = UDim.new(0, 16)
-	resultCorner.Parent = resultFrame
+	addCorner(resultFrame, 20)
+	addStroke(resultFrame, Color3.fromRGB(200, 205, 220), 3)
 
 	local resultText = Instance.new("TextLabel")
 	resultText.Name = "ResultText"
-	resultText.Size = UDim2.new(0.9, 0, 0.55, 0)
-	resultText.Position = UDim2.new(0.05, 0, 0.08, 0)
+	resultText.Size = UDim2.new(0.9, 0, 0.5, 0)
+	resultText.Position = UDim2.new(0.05, 0, 0.05, 0)
 	resultText.BackgroundTransparency = 1
 	resultText.Text = ""
-	resultText.TextColor3 = Color3.fromRGB(255, 255, 255)
+	resultText.TextColor3 = Color3.fromRGB(255, 200, 40)
 	resultText.TextScaled = true
-	resultText.Font = Enum.Font.GothamBlack
+	resultText.Font = FONT_TITLE
+	resultText.ZIndex = 21
 	resultText.Parent = resultFrame
+	addStroke(resultText, Color3.fromRGB(180, 100, 0), 3)
 
 	local resultScore = Instance.new("TextLabel")
 	resultScore.Name = "ResultScore"
 	resultScore.Size = UDim2.new(0.9, 0, 0.3, 0)
-	resultScore.Position = UDim2.new(0.05, 0, 0.63, 0)
+	resultScore.Position = UDim2.new(0.05, 0, 0.58, 0)
 	resultScore.BackgroundTransparency = 1
 	resultScore.Text = ""
-	resultScore.TextColor3 = Color3.fromRGB(180, 180, 180)
+	resultScore.TextColor3 = Color3.fromRGB(80, 80, 100)
 	resultScore.TextScaled = true
-	resultScore.Font = Enum.Font.GothamMedium
+	resultScore.Font = FONT_BOLD
+	resultScore.ZIndex = 21
 	resultScore.Parent = resultFrame
 
 	self.elements.resultFrame = resultFrame
@@ -427,15 +524,13 @@ function UIController:_createMissionPanel(gui)
 	panel.Name = "MissionPanel"
 	panel.Size = UDim2.new(0, 210, 0, panelH)
 	panel.Position = UDim2.new(0, 6, 0.22, 0)
-	panel.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
-	panel.BackgroundTransparency = 0.4
+	panel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	panel.BackgroundTransparency = 0.08
 	panel.BorderSizePixel = 0
 	panel.ClipsDescendants = true
 	panel.Parent = gui
-
-	local panelCorner = Instance.new("UICorner")
-	panelCorner.CornerRadius = UDim.new(0, 10)
-	panelCorner.Parent = panel
+	addCorner(panel, 16)
+	addStroke(panel, Color3.fromRGB(200, 205, 220), 2)
 
 	-- 미션 카드 3개
 	self.elements.missionCards = {}
@@ -446,15 +541,13 @@ function UIController:_createMissionPanel(gui)
 		card.Name = "Mission_" .. i
 		card.Size = UDim2.new(1, -PAD * 2, 0, CARD_H)
 		card.Position = UDim2.new(0, PAD, 0, yOffset)
-		card.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
-		card.BackgroundTransparency = 0.15
+		card.BackgroundColor3 = Color3.fromRGB(240, 242, 248)
+		card.BackgroundTransparency = 0
 		card.BorderSizePixel = 0
 		card.ClipsDescendants = true
 		card.Parent = panel
-
-		local cardCorner = Instance.new("UICorner")
-		cardCorner.CornerRadius = UDim.new(0, 8)
-		cardCorner.Parent = card
+		addCorner(card, 10)
+		addStroke(card, Color3.fromRGB(210, 215, 225), 1)
 
 		-- 보너스 (좌측, 크게)
 		local bonusLabel = Instance.new("TextLabel")
@@ -463,8 +556,8 @@ function UIController:_createMissionPanel(gui)
 		bonusLabel.Position = UDim2.new(0, 6, 0, 0)
 		bonusLabel.BackgroundTransparency = 1
 		bonusLabel.Text = ""
-		bonusLabel.TextColor3 = Color3.fromRGB(255, 210, 50)
-		bonusLabel.Font = Enum.Font.GothamBlack
+		bonusLabel.TextColor3 = Color3.fromRGB(255, 180, 30)
+		bonusLabel.Font = FONT_BOLD
 		bonusLabel.TextSize = 18
 		bonusLabel.TextXAlignment = Enum.TextXAlignment.Center
 		bonusLabel.Parent = card
@@ -491,7 +584,7 @@ function UIController:_createMissionPanel(gui)
 		statusLabel.BackgroundTransparency = 1
 		statusLabel.Text = ""
 		statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-		statusLabel.Font = Enum.Font.GothamBlack
+		statusLabel.Font = FONT_BOLD
 		statusLabel.TextSize = 16
 		statusLabel.ZIndex = 3
 		statusLabel.Visible = false
@@ -509,6 +602,115 @@ function UIController:_createMissionPanel(gui)
 	end
 
 	self.elements.missionPanel = panel
+
+	-- ===== 미션 토글 버튼 (모바일용, 좌하단) =====
+	local toggleBtn = Instance.new("TextButton")
+	toggleBtn.Name = "MissionToggle"
+	toggleBtn.Size = UDim2.new(0, 46, 0, 46)
+	toggleBtn.Position = UDim2.new(0, 10, 1, -105)
+	toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
+	toggleBtn.BackgroundTransparency = 0
+	toggleBtn.Text = "M"
+	toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	toggleBtn.Font = FONT_BOLD
+	toggleBtn.TextScaled = true
+	toggleBtn.BorderSizePixel = 0
+	toggleBtn.ZIndex = 5
+	toggleBtn.Visible = false
+	toggleBtn.Parent = gui
+	addCorner(toggleBtn, 14)
+	addStroke(toggleBtn, Color3.fromRGB(0, 140, 190), 3)
+
+	local toggleGrad = Instance.new("UIGradient")
+	toggleGrad.Color = ColorSequence.new(Color3.fromRGB(0, 220, 255), Color3.fromRGB(0, 170, 235))
+	toggleGrad.Rotation = 90
+	toggleGrad.Parent = toggleBtn
+
+	local togglePad = Instance.new("UIPadding")
+	togglePad.PaddingTop = UDim.new(0.15, 0)
+	togglePad.PaddingBottom = UDim.new(0.15, 0)
+	togglePad.Parent = toggleBtn
+
+	-- 느낌표 뱃지
+	local badge = Instance.new("Frame")
+	badge.Name = "Badge"
+	badge.Size = UDim2.new(0, 18, 0, 18)
+	badge.Position = UDim2.new(1, -6, 0, -6)
+	badge.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+	badge.BorderSizePixel = 0
+	badge.ZIndex = 6
+	badge.Visible = false
+	badge.Parent = toggleBtn
+	addCorner(badge, 9)
+
+	local badgeText = Instance.new("TextLabel")
+	badgeText.Size = UDim2.new(1, 0, 1, 0)
+	badgeText.BackgroundTransparency = 1
+	badgeText.Text = "!"
+	badgeText.TextColor3 = Color3.fromRGB(255, 255, 255)
+	badgeText.Font = FONT_BOLD
+	badgeText.TextScaled = true
+	badgeText.ZIndex = 7
+	badgeText.Parent = badge
+
+	self.elements.missionToggle = toggleBtn
+	self.elements.missionBadge = badge
+	self._missionOpen = false
+
+	-- 토글 클릭
+	toggleBtn.MouseButton1Click:Connect(function()
+		self._missionOpen = not self._missionOpen
+		if self._missionOpen then
+			-- 패널을 버튼 위에 펼치기
+			panel.Visible = true
+			panel.Position = UDim2.new(0, 6, 1, -100 - panelH - 8)
+			TweenService:Create(panel, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+				Position = UDim2.new(0, 6, 1, -100 - panelH - 8),
+			}):Play()
+			toggleBtn.Text = "X"
+		else
+			-- 패널 접기
+			TweenService:Create(panel, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+				Position = UDim2.new(0, 6, 1, -100),
+			}):Play()
+			task.delay(0.15, function()
+				if not self._missionOpen then
+					panel.Visible = false
+				end
+			end)
+			toggleBtn.Text = "M"
+		end
+	end)
+
+	-- 화면 크기 감지 → 모바일이면 토글 모드
+	self:_updateMissionLayout()
+	workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+		self:_updateMissionLayout()
+	end)
+end
+
+function UIController:_updateMissionLayout()
+	local cam = workspace.CurrentCamera
+	if not cam then return end
+	local vpSize = cam.ViewportSize
+	local isMobile = vpSize.X < 800 or vpSize.Y > vpSize.X
+
+	local panel = self.elements.missionPanel
+	local toggle = self.elements.missionToggle
+
+	if isMobile then
+		-- 모바일: 패널 숨기고 토글 버튼 보이기
+		toggle.Visible = true
+		if not self._missionOpen then
+			panel.Visible = false
+		end
+	else
+		-- PC: 패널 항상 보이기, 토글 숨기기
+		toggle.Visible = false
+		panel.Visible = true
+		panel.Position = UDim2.new(0, 6, 0.22, 0)
+		self._missionOpen = false
+	end
 end
 
 -- 미션 초기화 (매치 시작 시 서버에서 받은 미션 데이터로)
@@ -534,20 +736,17 @@ function UIController:initMissions(missions)
 			local bubble = Instance.new("Frame")
 			bubble.Name = "Letter_" .. i
 			bubble.Size = UDim2.new(0, 28, 0, 28)
-			bubble.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+			bubble.BackgroundColor3 = Color3.fromRGB(220, 225, 235)
 			bubble.BorderSizePixel = 0
-
-			local bubbleCorner = Instance.new("UICorner")
-			bubbleCorner.CornerRadius = UDim.new(0, 6)
-			bubbleCorner.Parent = bubble
+			addCorner(bubble, 8)
 
 			local letterLabel = Instance.new("TextLabel")
 			letterLabel.Name = "Text"
 			letterLabel.Size = UDim2.new(1, 0, 1, 0)
 			letterLabel.BackgroundTransparency = 1
 			letterLabel.Text = letter
-			letterLabel.TextColor3 = Color3.fromRGB(120, 120, 135)
-			letterLabel.Font = Enum.Font.GothamBlack
+			letterLabel.TextColor3 = Color3.fromRGB(100, 100, 120)
+			letterLabel.Font = FONT_BOLD
 			letterLabel.TextSize = 15
 			letterLabel.Parent = bubble
 
@@ -557,7 +756,10 @@ function UIController:initMissions(missions)
 
 		-- 상태 리셋
 		cardData.statusLabel.Visible = false
-		cardData.card.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
+		cardData.card.BackgroundColor3 = Color3.fromRGB(240, 242, 248)
+		if cardData.avatarIcon then
+			cardData.avatarIcon.Visible = false
+		end
 	end
 end
 
@@ -571,24 +773,65 @@ function UIController:updateMissions(missions, playerLetters)
 		if not cardData then continue end
 
 		if mission.claimedBy then
-			-- 선점된 미션
-			if mission.claimedBy == "player" then
-				cardData.card.BackgroundColor3 = Color3.fromRGB(30, 80, 40)
-				cardData.statusLabel.Text = "CLEAR!"
-				cardData.statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-				cardData.bonusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+			-- 팀 색 + 아바타 헤드샷
+			local isMe = mission.claimedBy == "player"
+			local teamColor, teamColorLight, statusText
+			if isMe then
+				teamColor = Color3.fromRGB(210, 50, 60)
+				teamColorLight = Color3.fromRGB(240, 120, 130)
+				statusText = "CLEAR!"
 			else
-				cardData.card.BackgroundColor3 = Color3.fromRGB(50, 40, 40)
-				cardData.statusLabel.Text = "TAKEN"
-				cardData.statusLabel.TextColor3 = Color3.fromRGB(150, 80, 80)
-				cardData.bonusLabel.TextColor3 = Color3.fromRGB(80, 80, 85)
-				-- 레터 어둡게
-				for _, bubble in cardData.letterBubbles do
-					bubble.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
-					local txt = bubble:FindFirstChild("Text")
-					if txt then txt.TextColor3 = Color3.fromRGB(70, 70, 75) end
-				end
+				teamColor = Color3.fromRGB(50, 85, 210)
+				teamColorLight = Color3.fromRGB(120, 150, 240)
+				statusText = "TAKEN"
 			end
+
+			cardData.card.BackgroundColor3 = teamColor
+			cardData.statusLabel.Text = statusText
+			cardData.statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+			cardData.statusLabel.Font = FONT_TITLE
+			cardData.statusLabel.TextSize = 16
+			cardData.bonusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+			for _, bubble in cardData.letterBubbles do
+				bubble.BackgroundColor3 = teamColorLight
+				local txt = bubble:FindFirstChild("Text")
+				if txt then txt.TextColor3 = Color3.fromRGB(255, 255, 255) end
+			end
+
+			-- 아바타 헤드샷 (카드 우측 끝)
+			if not cardData.avatarIcon then
+				local icon = Instance.new("ImageLabel")
+				icon.Name = "Avatar"
+				icon.Size = UDim2.new(0, 30, 0, 30)
+				icon.Position = UDim2.new(1, -36, 0.5, -15)
+				icon.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				icon.BackgroundTransparency = 0
+				icon.ZIndex = 4
+				icon.ScaleType = Enum.ScaleType.Crop
+				icon.Parent = cardData.card
+				addCorner(icon, 15)
+				addStroke(icon, Color3.fromRGB(255, 255, 255), 2)
+				cardData.avatarIcon = icon
+			end
+
+			-- 헤드샷 이미지 설정
+			local userId
+			if isMe then
+				userId = Players.LocalPlayer.UserId
+			else
+				userId = self._opponentId
+			end
+
+			if userId then
+				cardData.avatarIcon.Image = "rbxthumb://type=AvatarHeadShot&id=" .. userId .. "&w=150&h=150"
+			else
+				-- AI면 아이콘 숨김
+				cardData.avatarIcon.Image = ""
+				cardData.avatarIcon.BackgroundColor3 = teamColorLight
+			end
+			cardData.avatarIcon.Visible = true
+
 			cardData.statusLabel.Visible = true
 		elseif playerLetters then
 			-- 미선점 → 보유 레터에 따라 버블 하이라이트
@@ -605,16 +848,21 @@ function UIController:updateMissions(missions, playerLetters)
 					local txt = bubble:FindFirstChild("Text")
 					if have >= used[letter] then
 						-- 보유함 → 밝게
-						bubble.BackgroundColor3 = Color3.fromRGB(60, 120, 200)
+						bubble.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
 						if txt then txt.TextColor3 = Color3.fromRGB(255, 255, 255) end
 					else
-						-- 미보유 → 어둡게
-						bubble.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
-						if txt then txt.TextColor3 = Color3.fromRGB(120, 120, 135) end
+						-- 미보유 → 밝은 회색
+						bubble.BackgroundColor3 = Color3.fromRGB(220, 225, 235)
+						if txt then txt.TextColor3 = Color3.fromRGB(100, 100, 120) end
 					end
 				end
 			end
 		end
+	end
+
+	-- 느낌표 뱃지 비활성화
+	if self.elements.missionBadge then
+		self.elements.missionBadge.Visible = false
 	end
 end
 
@@ -625,19 +873,16 @@ function UIController:_showMissionPopup(mission)
 	popup.Size = UDim2.new(0, 0, 0, 0)
 	popup.Position = UDim2.new(0.5, 0, 0.4, 0)
 	popup.AnchorPoint = Vector2.new(0.5, 0.5)
-	popup.BackgroundColor3 = Color3.fromRGB(25, 40, 60)
-	popup.BackgroundTransparency = 0.1
+	popup.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	popup.BackgroundTransparency = 0.03
 	popup.BorderSizePixel = 0
 	popup.ZIndex = 10
 	popup.Parent = self.gui
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 12)
-	corner.Parent = popup
+	addCorner(popup, 16)
 
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(100, 200, 255)
-	stroke.Thickness = 2
+	stroke.Color = Color3.fromRGB(0, 200, 255)
+	stroke.Thickness = 3
 	stroke.Transparency = 0
 	stroke.Parent = popup
 
@@ -648,11 +893,12 @@ function UIController:_showMissionPopup(mission)
 	titleLabel.Position = UDim2.new(0, 8, 0, 4)
 	titleLabel.BackgroundTransparency = 1
 	titleLabel.Text = "MISSION COMPLETE!"
-	titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	titleLabel.TextColor3 = Color3.fromRGB(0, 200, 255)
 	titleLabel.TextScaled = true
-	titleLabel.Font = Enum.Font.GothamBlack
+	titleLabel.Font = FONT_TITLE
 	titleLabel.ZIndex = 11
 	titleLabel.Parent = popup
+	addStroke(titleLabel, Color3.fromRGB(0, 100, 160), 2)
 
 	-- 레터 + 보너스 행
 	local detailLabel = Instance.new("TextLabel")
@@ -661,11 +907,12 @@ function UIController:_showMissionPopup(mission)
 	detailLabel.Position = UDim2.new(0, 8, 0.5, 2)
 	detailLabel.BackgroundTransparency = 1
 	detailLabel.Text = table.concat(mission.letters, "-") .. "  +" .. mission.bonus
-	detailLabel.TextColor3 = Color3.fromRGB(100, 220, 255)
+	detailLabel.TextColor3 = Color3.fromRGB(255, 180, 40)
 	detailLabel.TextScaled = true
-	detailLabel.Font = Enum.Font.GothamBold
+	detailLabel.Font = FONT_BOLD
 	detailLabel.ZIndex = 11
 	detailLabel.Parent = popup
+	addStroke(detailLabel, Color3.fromRGB(160, 100, 0), 2)
 
 	-- 스케일 업
 	TweenService:Create(popup, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
@@ -715,11 +962,18 @@ function UIController:updateScores(playerScore: number, aiScore: number)
 	self.elements.blueScore.Text = tostring(aiScore)
 end
 
-function UIController:updateTimer(seconds: number)
-	seconds = math.max(seconds, 0)
-	local min = math.floor(seconds / 60)
-	local sec = seconds % 60
-	self.elements.timer.Text = string.format("%02d:%02d", min, sec)
+function UIController:updateTimer(_seconds: number)
+	-- 게임 타이머 제거됨 (공 10개 다 쓰면 종료)
+end
+
+function UIController:hideTurnTimer()
+	if self._turnTimerThread then
+		task.cancel(self._turnTimerThread)
+		self._turnTimerThread = nil
+	end
+	if self.elements.turnTimer then
+		self.elements.turnTimer.Visible = false
+	end
 end
 
 function UIController:updatePowerGauge(ratio: number)
@@ -756,15 +1010,14 @@ function UIController:updateSpinIndicator(spin: number, power: number?)
 		frame.Name = "SpinFrame"
 		frame.Size = UDim2.new(0, 90, 0, 110)
 		frame.Position = UDim2.new(0, 10, 0.45, 0)
-		frame.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
-		frame.BackgroundTransparency = 0.25
+		frame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		frame.BackgroundTransparency = 0.08
 		frame.BorderSizePixel = 0
 		frame.Visible = false
 		frame.Parent = self.gui
 
-		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, 10)
-		corner.Parent = frame
+		addCorner(frame, 14)
+		addStroke(frame, Color3.fromRGB(200, 205, 220), 2)
 
 		-- ViewportFrame: 3D 공 렌더링
 		local viewport = Instance.new("ViewportFrame")
@@ -797,9 +1050,9 @@ function UIController:updateSpinIndicator(spin: number, power: number?)
 		speedText.Size = UDim2.new(1, -10, 0, 16)
 		speedText.Position = UDim2.new(0, 5, 1, -38)
 		speedText.BackgroundTransparency = 1
-		speedText.TextColor3 = Color3.fromRGB(180, 180, 180)
+		speedText.TextColor3 = Color3.fromRGB(100, 100, 120)
 		speedText.TextScaled = true
-		speedText.Font = Enum.Font.GothamMedium
+		speedText.Font = FONT_MEDIUM
 		speedText.Text = "0.0 m/s"
 		speedText.Parent = frame
 
@@ -811,7 +1064,7 @@ function UIController:updateSpinIndicator(spin: number, power: number?)
 		spinText.BackgroundTransparency = 1
 		spinText.TextColor3 = Color3.fromRGB(255, 255, 255)
 		spinText.TextScaled = true
-		spinText.Font = Enum.Font.GothamBold
+		spinText.Font = FONT_BOLD
 		spinText.Text = "SPIN 0"
 		spinText.Parent = frame
 
@@ -854,83 +1107,189 @@ function UIController:updateSpinIndicator(spin: number, power: number?)
 	end
 end
 
-function UIController:setTurn(isPlayerTurn: boolean)
-	local label = self.elements.turnLabel
-	label.Visible = true
+function UIController:setTurn(isPlayerTurn: boolean, isBonus: boolean?)
+	local panel = self.elements.turnPanel
+	local turnText = self.elements.turnText
+	local turnTimer = self.elements.turnTimer
 
-	-- 턴 타이머 초기화
+	-- 이전 타이머 정리
 	if self._turnTimerThread then
 		task.cancel(self._turnTimerThread)
 		self._turnTimerThread = nil
 	end
+	if self._turnFadeTimer then
+		task.cancel(self._turnFadeTimer)
+		self._turnFadeTimer = nil
+	end
 
+	-- 볼 도트: 내 턴엔 내 볼만, 상대 턴엔 상대 볼만
+	self._isBonus = isBonus or false
+	self.elements.playerDotRow.Visible = isPlayerTurn
+	self.elements.aiDotRow.Visible = not isPlayerTurn
+	self:_updateTurnDots()
+
+	-- 볼 카운트 텍스트
+	local total = Config.GAME.BALLS_PER_PLAYER
+	local remaining = isPlayerTurn and self._playerBalls or self._aiBalls
+	local thrown = total - remaining
+	if not isBonus then
+		thrown = thrown + 1 -- 지금 던질 공 포함 (보너스 턴은 소모 없음)
+	end
+	self.elements.ballCountText.Text = math.min(thrown, total) .. " / " .. total
+
+	-- 턴 텍스트 + 색상
+	local panelStroke = panel:FindFirstChildOfClass("UIStroke")
 	if isPlayerTurn then
-		label.Text = "YOUR TURN"
-		label.BackgroundColor3 = Color3.fromRGB(160, 35, 45)
-
-		-- 턴 카운트다운 시작
-		local turnTimer = self.elements.turnTimer
-		if turnTimer then
-			turnTimer.Visible = true
-			self._turnTimerThread = task.spawn(function()
-				for sec = Config.GAME.TURN_TIME, 1, -1 do
-					turnTimer.Text = tostring(sec)
-					-- 3초 이하면 빨간색 강조
-					if sec <= 3 then
-						turnTimer.BackgroundColor3 = Color3.fromRGB(220, 40, 30)
-					else
-						turnTimer.BackgroundColor3 = Color3.fromRGB(200, 60, 50)
-					end
-					task.wait(1)
-				end
-				turnTimer.Visible = false
-			end)
+		if isBonus then
+			turnText.Text = "BONUS TURN!"
+			turnText.TextColor3 = Color3.fromRGB(255, 180, 30)
+			panel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			if panelStroke then panelStroke.Color = Color3.fromRGB(255, 180, 30) end
+		else
+			turnText.Text = "YOUR TURN"
+			turnText.TextColor3 = Color3.fromRGB(220, 50, 60)
+			panel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			if panelStroke then panelStroke.Color = Color3.fromRGB(220, 50, 60) end
 		end
 	else
-		label.Text = "AI THINKING..."
-		label.BackgroundColor3 = Color3.fromRGB(40, 70, 180)
-		if self.elements.turnTimer then
-			self.elements.turnTimer.Visible = false
+		turnText.Text = self._opponentName or "AI"
+		turnText.TextColor3 = Color3.fromRGB(50, 90, 210)
+		panel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		if panelStroke then panelStroke.Color = Color3.fromRGB(50, 90, 210) end
+	end
+
+	-- ===== 턴 타이머 (독립, 항상 보임) =====
+	if isPlayerTurn then
+		turnTimer.Visible = true
+		self._turnTimerThread = task.spawn(function()
+			for sec = Config.GAME.TURN_TIME, 1, -1 do
+				turnTimer.Text = tostring(sec)
+				if sec <= 5 then
+					turnTimer.BackgroundColor3 = Color3.fromRGB(220, 40, 30)
+					local ts = turnTimer:FindFirstChildOfClass("UIStroke")
+					if ts then ts.Color = Color3.fromRGB(160, 25, 20) end
+				else
+					turnTimer.BackgroundColor3 = Color3.fromRGB(40, 42, 55)
+					local ts = turnTimer:FindFirstChildOfClass("UIStroke")
+					if ts then ts.Color = Color3.fromRGB(25, 28, 40) end
+				end
+				task.wait(1)
+			end
+			turnTimer.Visible = false
+		end)
+	else
+		turnTimer.Visible = false
+	end
+
+	-- ===== 패널 페이드 인 =====
+	panel.Visible = true
+	panel.BackgroundTransparency = 1
+
+	-- 도트(D1~D10)는 페이드 대상 제외 — 즉시 표시
+	for _, child in panel:GetDescendants() do
+		local isDot = child:IsA("Frame") and child.Name:match("^D%d")
+		if isDot then
+			-- 도트는 _updateTurnDots에서 이미 설정됨, 건드리지 않음
+		elseif child:IsA("TextLabel") then
+			child.TextTransparency = 1
+		elseif child:IsA("UIStroke") then
+			child.Transparency = 1
+		elseif child:IsA("Frame") then
+			child.BackgroundTransparency = 1
 		end
 	end
 
-	-- 페이드 인
-	label.TextTransparency = 1
-	label.BackgroundTransparency = 1
-	TweenService:Create(label, TweenInfo.new(0.3), {
-		TextTransparency = 0,
-		BackgroundTransparency = 0.15,
+	TweenService:Create(panel, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 0,
 	}):Play()
-
-	-- 3초 후 페이드 아웃
-	task.delay(2.5, function()
-		if label.Visible then
-			TweenService:Create(label, TweenInfo.new(0.5), {
-				TextTransparency = 1,
-				BackgroundTransparency = 1,
-			}):Play()
+	for _, child in panel:GetDescendants() do
+		local isDot = child:IsA("Frame") and child.Name:match("^D%d")
+		if isDot then
+			-- 도트는 이미 보임
+		elseif child:IsA("TextLabel") then
+			TweenService:Create(child, TweenInfo.new(0.3), { TextTransparency = 0 }):Play()
+		elseif child:IsA("UIStroke") then
+			TweenService:Create(child, TweenInfo.new(0.3), { Transparency = 0 }):Play()
 		end
+	end
+
+	-- 2초 후 패널만 페이드 아웃 (타이머는 유지!)
+	self._turnFadeTimer = task.delay(2, function()
+		if not panel.Visible then return end
+
+		TweenService:Create(panel, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			BackgroundTransparency = 1,
+		}):Play()
+		for _, child in panel:GetDescendants() do
+			if child:IsA("TextLabel") then
+				TweenService:Create(child, TweenInfo.new(0.5), { TextTransparency = 1 }):Play()
+			end
+			if child:IsA("UIStroke") then
+				TweenService:Create(child, TweenInfo.new(0.5), { Transparency = 1 }):Play()
+			end
+			if child:IsA("Frame") then
+				TweenService:Create(child, TweenInfo.new(0.5), { BackgroundTransparency = 1 }):Play()
+			end
+		end
+
+		task.delay(0.6, function()
+			panel.Visible = false
+			self._turnFadeTimer = nil
+		end)
 	end)
 end
 
-function UIController:updateRemainingBalls(playerBalls: number, aiBalls: number)
-	for _, child in self.elements.redBallRow:GetChildren() do
-		if child:IsA("Frame") then
-			local idx = tonumber(child.Name:match("%d+"))
+-- 볼 도트 업데이트: 쓴공=팀색(왼쪽부터 채움), 안쓴공=흰색
+function UIController:_updateTurnDots()
+	local maxBalls = Config.GAME.BALLS_PER_PLAYER
+	-- 보너스 턴이면 현재 턴 플레이어의 도트만 +1 안 함
+	local playerOffset = (self._isBonus and self.elements.playerDotRow.Visible) and 0 or 1
+	local aiOffset = (self._isBonus and self.elements.aiDotRow.Visible) and 0 or 1
+	local usedPlayer = math.min(maxBalls - self._playerBalls + playerOffset, maxBalls)
+	local usedAI = math.min(maxBalls - self._aiBalls + aiOffset, maxBalls)
+
+	-- 플레이어 도트: 왼쪽부터 쓴 만큼 빨강, 나머지 흰색
+	for _, dot in self.elements.playerDotRow:GetChildren() do
+		if dot:IsA("Frame") then
+			local idx = tonumber(dot.Name:match("%d+"))
 			if idx then
-				child.BackgroundTransparency = idx <= playerBalls and 0 or 0.75
+				local stroke = dot:FindFirstChildOfClass("UIStroke")
+				if idx <= usedPlayer then
+					dot.BackgroundColor3 = Config.BALL.COLORS.RED
+					dot.BackgroundTransparency = 0
+					if stroke then stroke.Color = Color3.fromRGB(160, 30, 40) end
+				else
+					dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+					dot.BackgroundTransparency = 0
+					if stroke then stroke.Color = Color3.fromRGB(200, 200, 210) end
+				end
 			end
 		end
 	end
 
-	for _, child in self.elements.blueBallRow:GetChildren() do
-		if child:IsA("Frame") then
-			local idx = tonumber(child.Name:match("%d+"))
+	-- AI 도트: 왼쪽부터 쓴 만큼 파랑, 나머지 흰색
+	for _, dot in self.elements.aiDotRow:GetChildren() do
+		if dot:IsA("Frame") then
+			local idx = tonumber(dot.Name:match("%d+"))
 			if idx then
-				child.BackgroundTransparency = idx <= aiBalls and 0 or 0.75
+				local stroke = dot:FindFirstChildOfClass("UIStroke")
+				if idx <= usedAI then
+					dot.BackgroundColor3 = Config.BALL.COLORS.BLUE
+					dot.BackgroundTransparency = 0
+					if stroke then stroke.Color = Color3.fromRGB(30, 55, 160) end
+				else
+					dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+					dot.BackgroundTransparency = 0
+					if stroke then stroke.Color = Color3.fromRGB(200, 200, 210) end
+				end
 			end
 		end
 	end
+end
+
+function UIController:updateRemainingBalls(playerBalls: number, aiBalls: number)
+	self._playerBalls = playerBalls
+	self._aiBalls = aiBalls
 end
 
 function UIController:showScorePopup(position: Vector3, points: number, team: string)
@@ -947,8 +1306,8 @@ function UIController:showScorePopup(position: Vector3, points: number, team: st
 	popup.Text = "+" .. points
 	popup.TextColor3 = team == "player" and RED or BLUE
 	popup.TextScaled = true
-	popup.Font = Enum.Font.GothamBlack
-	popup.TextStrokeTransparency = 0.4
+	popup.Font = FONT_TITLE
+	popup.TextStrokeTransparency = 0.2
 	popup.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
 	popup.Parent = self.gui
 
@@ -973,9 +1332,9 @@ function UIController:showTimingGrade(gradeName: string, gradeColor: Color3)
 	label.BackgroundTransparency = 1
 	label.Text = gradeName
 	label.TextColor3 = gradeColor
-	label.Font = Enum.Font.GothamBlack
-	label.TextSize = 40
-	label.TextStrokeTransparency = 0.3
+	label.Font = FONT_TITLE
+	label.TextSize = 44
+	label.TextStrokeTransparency = 0.2
 	label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	label.TextTransparency = 0
 	label.ZIndex = 15
@@ -1002,6 +1361,14 @@ function UIController:showTimingGrade(gradeName: string, gradeColor: Color3)
 	end)
 end
 
+function UIController:show()
+	self.gui.Enabled = true
+end
+
+function UIController:hide()
+	self.gui.Enabled = false
+end
+
 function UIController:hideResult()
 	self.elements.resultFrame.Visible = false
 end
@@ -1009,18 +1376,129 @@ end
 function UIController:showMatchResult(winner: string, scores)
 	self.elements.resultFrame.Visible = true
 
+	local rt = self.elements.resultText
+	local rtStroke = rt:FindFirstChildOfClass("UIStroke")
+
 	if winner == "player" then
-		self.elements.resultText.Text = "YOU WIN!"
-		self.elements.resultText.TextColor3 = Color3.fromRGB(255, 215, 50)
+		rt.Text = "YOU WIN!"
+		rt.TextColor3 = Color3.fromRGB(255, 220, 50)
+		if rtStroke then rtStroke.Color = Color3.fromRGB(180, 120, 0) end
 	elseif winner == "ai" then
-		self.elements.resultText.Text = "YOU LOSE"
-		self.elements.resultText.TextColor3 = Color3.fromRGB(180, 60, 60)
+		rt.Text = "YOU LOSE"
+		rt.TextColor3 = Color3.fromRGB(220, 70, 70)
+		if rtStroke then rtStroke.Color = Color3.fromRGB(140, 30, 30) end
 	else
-		self.elements.resultText.Text = "DRAW"
-		self.elements.resultText.TextColor3 = Color3.fromRGB(200, 200, 200)
+		rt.Text = "DRAW"
+		rt.TextColor3 = Color3.fromRGB(150, 150, 170)
+		if rtStroke then rtStroke.Color = Color3.fromRGB(80, 80, 100) end
 	end
 
 	self.elements.resultScore.Text = string.format("%d - %d", scores.player, scores.ai)
+end
+
+-- ===== 매칭 발견 팝업 =====
+function UIController:showMatchFoundPopup(opponentName: string, countdown: number, onCancel: () -> ())
+	-- 기존 팝업 제거
+	self:hideMatchFoundPopup()
+
+	local popup = Instance.new("Frame")
+	popup.Name = "MatchFoundPopup"
+	popup.Size = UDim2.new(0, 340, 0, 200)
+	popup.Position = UDim2.new(0.5, -170, 0.5, -100)
+	popup.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	popup.BackgroundTransparency = 0.02
+	popup.BorderSizePixel = 0
+	popup.ZIndex = 50
+	popup.Parent = self.gui
+	addCorner(popup, 20)
+	addStroke(popup, Color3.fromRGB(0, 200, 255), 3)
+
+	-- "MATCH FOUND!"
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(0.9, 0, 0, 36)
+	title.Position = UDim2.new(0.05, 0, 0, 16)
+	title.BackgroundTransparency = 1
+	title.Text = "MATCH FOUND!"
+	title.TextColor3 = Color3.fromRGB(0, 180, 240)
+	title.Font = FONT_TITLE
+	title.TextScaled = true
+	title.ZIndex = 51
+	title.Parent = popup
+	addStroke(title, Color3.fromRGB(0, 100, 160), 2)
+
+	-- "vs 상대이름"
+	local vsLabel = Instance.new("TextLabel")
+	vsLabel.Size = UDim2.new(0.9, 0, 0, 28)
+	vsLabel.Position = UDim2.new(0.05, 0, 0, 56)
+	vsLabel.BackgroundTransparency = 1
+	vsLabel.Text = "vs  " .. opponentName
+	vsLabel.TextColor3 = Color3.fromRGB(80, 80, 100)
+	vsLabel.Font = FONT_BOLD
+	vsLabel.TextScaled = true
+	vsLabel.ZIndex = 51
+	vsLabel.Parent = popup
+
+	-- 카운트다운 숫자
+	local countLabel = Instance.new("TextLabel")
+	countLabel.Size = UDim2.new(0.4, 0, 0, 50)
+	countLabel.Position = UDim2.new(0.3, 0, 0, 88)
+	countLabel.BackgroundTransparency = 1
+	countLabel.Text = tostring(countdown)
+	countLabel.TextColor3 = Color3.fromRGB(255, 180, 40)
+	countLabel.Font = FONT_TITLE
+	countLabel.TextScaled = true
+	countLabel.ZIndex = 51
+	countLabel.Parent = popup
+	addStroke(countLabel, Color3.fromRGB(180, 100, 0), 3)
+
+	-- 취소 버튼
+	local cancelBtn = Instance.new("TextButton")
+	cancelBtn.Size = UDim2.new(0.5, 0, 0, 38)
+	cancelBtn.Position = UDim2.new(0.25, 0, 1, -52)
+	cancelBtn.BackgroundColor3 = Color3.fromRGB(220, 70, 70)
+	cancelBtn.Text = "CANCEL"
+	cancelBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	cancelBtn.Font = FONT_BOLD
+	cancelBtn.TextScaled = true
+	cancelBtn.BorderSizePixel = 0
+	cancelBtn.ZIndex = 51
+	cancelBtn.Parent = popup
+	addCorner(cancelBtn, 10)
+	addStroke(cancelBtn, Color3.fromRGB(160, 40, 40), 2)
+
+	local cancelPad = Instance.new("UIPadding")
+	cancelPad.PaddingTop = UDim.new(0.15, 0)
+	cancelPad.PaddingBottom = UDim.new(0.15, 0)
+	cancelPad.Parent = cancelBtn
+
+	cancelBtn.MouseButton1Click:Connect(function()
+		if onCancel then onCancel() end
+		self:hideMatchFoundPopup()
+	end)
+
+	self.elements.matchFoundPopup = popup
+
+	-- 카운트다운 애니메이션
+	task.spawn(function()
+		for i = countdown, 1, -1 do
+			if not popup or not popup.Parent then return end
+			countLabel.Text = tostring(i)
+			-- 펄스 애니메이션
+			countLabel.TextScaled = false
+			countLabel.TextSize = 30
+			TweenService:Create(countLabel, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+				TextSize = 44,
+			}):Play()
+			task.wait(1)
+		end
+	end)
+end
+
+function UIController:hideMatchFoundPopup()
+	if self.elements.matchFoundPopup then
+		self.elements.matchFoundPopup:Destroy()
+		self.elements.matchFoundPopup = nil
+	end
 end
 
 return UIController

@@ -63,11 +63,10 @@ Config.BALL = {
 
 -- 게임 규칙
 Config.GAME = {
-	BALLS_PER_PLAYER = 8,
-	MATCH_TIME = 180,
+	BALLS_PER_PLAYER = 10,
 	TURN_TIME = 30,
-	BALL_SETTLE_VELOCITY = 0.4,
-	BALL_SETTLE_TIMEOUT = 10,
+	BALL_SETTLE_VELOCITY = 0.3,
+	BALL_SETTLE_TIMEOUT = 15,
 	BALL_OUT_Y = -5,
 	CONSECUTIVE_BONUS = { [2] = 1, [3] = 3, [4] = 6, [5] = 10, [6] = 15, [7] = 21 },
 }
@@ -78,7 +77,7 @@ Config.LAUNCH = {
 	MAX_POWER = 54,
 	SPAWN_Z = -40,
 	SPAWN_Y_OFFSET = 1.5,
-	SPAWN_X_RANGE = 9,
+	SPAWN_X_RANGE = 11,
 	FLICK_MIN_SPEED = 80, -- 최소 마우스 속도 (px/s) — 이하면 취소
 	FLICK_MAX_SPEED = 1200, -- 이 속도에서 MAX_POWER
 	VELOCITY_SAMPLES = 10, -- 속도 계산용 샘플 수 (많을수록 안정적)
@@ -151,6 +150,14 @@ Config.MISSIONS = {
 	},
 }
 
+-- 로비
+Config.LOBBY = {
+	MATCH_TIMEOUT = 5, -- 매칭 대기 시간 (초)
+	-- 로비 카메라: 빈 하늘을 보도록 (UI가 덮으므로 상관없음)
+	CAMERA_POS = Vector3.new(0, 100, -200),
+	CAMERA_LOOK = Vector3.new(0, 100, 0),
+}
+
 -- RemoteEvent
 Config.REMOTES = {
 	"RequestLaunch",
@@ -160,6 +167,10 @@ Config.REMOTES = {
 	"MatchStart",
 	"MatchEnd",
 	"BallCreated",
+	"RequestMatch",
+	"MatchFound",
+	"CancelMatchmaking",
+	"MatchCancelled",
 }
 
 return Config

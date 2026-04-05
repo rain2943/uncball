@@ -7,6 +7,7 @@ CameraController.__index = CameraController
 
 --[[
 	카메라 상태:
+	LOBBY        → 로비 화면 (고정 앵글)
 	OVERVIEW     → 전체 조감도 (AI 턴, 턴 사이)
 	LAUNCH_VIEW  → 낮은 각도 발사 뷰 (플레이어 턴)
 	LAUNCH_DELAY → 발사 직후 잠시 현재 뷰 유지
@@ -25,9 +26,11 @@ function CameraController.new()
 
 	self.overviewCF = CFrame.lookAt(Config.CAMERA.OVERVIEW_OFFSET, Config.CAMERA.OVERVIEW_LOOK_AT)
 	self.launchCF = CFrame.lookAt(Config.CAMERA.LAUNCH_OFFSET, Config.CAMERA.LAUNCH_LOOK_AT)
+	self.lobbyCF = CFrame.lookAt(Config.LOBBY.CAMERA_POS, Config.LOBBY.CAMERA_LOOK)
 
 	self:_forceScriptable()
-	self.camera.CFrame = self.overviewCF
+	self.camera.CFrame = self.lobbyCF
+	self.state = "LOBBY"
 
 	self.renderConn = RunService.RenderStepped:Connect(function(dt)
 		self:_forceScriptable()
@@ -42,6 +45,12 @@ function CameraController:_forceScriptable()
 		self.camera.CameraType = Enum.CameraType.Scriptable
 	end
 	self.camera.CameraSubject = nil
+end
+
+-- 로비 뷰
+function CameraController:enterLobbyView()
+	self.state = "LOBBY"
+	self.trackedBall = nil
 end
 
 -- 플레이어 턴: 발사 뷰로 전환
@@ -73,15 +82,18 @@ function CameraController:trackBall(ball: Part?)
 end
 
 function CameraController:_update(dt: number)
-	if self.state == "OVERVIEW" then
+	if self.state == "LOBBY" then
+		self.camera.CFrame = self.camera.CFrame:Lerp(self.lobbyCF, math.min(dt * 2, 1))
+
+	elseif self.state == "OVERVIEW" then
 		self.camera.CFrame = self.camera.CFrame:Lerp(self.overviewCF, math.min(dt * 3, 1))
 
 	elseif self.state == "LAUNCH_VIEW" then
 		-- 공 X 위치를 따라감
 		local followX = self.launchFollowX or 0
 		local targetCF = CFrame.lookAt(
-			Config.CAMERA.LAUNCH_OFFSET + Vector3.new(followX * 0.7, 0, 0),
-			Config.CAMERA.LAUNCH_LOOK_AT + Vector3.new(followX * 0.5, 0, 0)
+			Config.CAMERA.LAUNCH_OFFSET + Vector3.new(followX * 1.0, 0, 0),
+			Config.CAMERA.LAUNCH_LOOK_AT + Vector3.new(followX * 0.8, 0, 0)
 		)
 		self.camera.CFrame = self.camera.CFrame:Lerp(targetCF, math.min(dt * Config.CAMERA.LAUNCH_TRANSITION_SPEED, 1))
 

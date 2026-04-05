@@ -15,14 +15,15 @@ function GameManager.new()
 	local self = setmetatable({}, GameManager)
 	self.state = "IDLE"
 	self.player = nil
+	self.opponent = nil -- PvP 상대 (nil이면 AI 대전)
 	self.remotes = nil
 	self.ai = nil
+	self.onMatchEnd = nil -- 매치 종료 콜백
 
 	-- 게임 상태
 	self.scores = { player = 0, ai = 0 }
 	self.remainingBalls = { player = Config.GAME.BALLS_PER_PLAYER, ai = Config.GAME.BALLS_PER_PLAYER }
 	self.currentTurn = "player"
-	self.matchTimer = Config.GAME.MATCH_TIME
 	self.activeBall = nil
 
 	-- 슬롯 소유권: [zoneNum][slotIdx] = "player" | "ai" | nil
@@ -46,10 +47,7 @@ end
 function GameManager:init(remotes)
 	self.remotes = remotes
 
-	-- 테이블 빌드
-	TableBuilder.build()
-
-	-- AI 초기화
+	-- AI 초기화 (테이블은 서버에서 이미 빌드됨)
 	self.ai = AIPlayer.new(TableBuilder.slotPositions)
 
 	-- 타이머 + looseBall 체크 루프
@@ -61,23 +59,20 @@ function GameManager:init(remotes)
 				self:_checkLooseBalls()
 			end
 			if self.state ~= "IDLE" and self.state ~= "MATCH_END" then
-				self.matchTimer = self.matchTimer - 1
-				if self.matchTimer <= 0 then
-					self:_endMatch()
-				end
 				self:_broadcastState()
 			end
 		end
 	end)
 end
 
-function GameManager:startMatch(player)
+function GameManager:startMatch(player, opponent)
 	self.player = player
+	self.opponent = opponent -- nil이면 AI, Player면 PvP
 	self.state = "STARTING"
 	self.scores = { player = 0, ai = 0 }
 	self.remainingBalls = { player = Config.GAME.BALLS_PER_PLAYER, ai = Config.GAME.BALLS_PER_PLAYER }
-	self.matchTimer = Config.GAME.MATCH_TIME
-	self.currentTurn = "player"
+	-- 선턴: PvP면 랜덤, AI면 플레이어 선턴
+	self.currentTurn = opponent and (math.random() < 0.5 and "player" or "ai") or "player"
 	self.settledBalls = {}
 	self.looseBalls = {}
 
@@ -90,22 +85,45 @@ function GameManager:startMatch(player)
 	-- 미션 카드 생성
 	self:_generateMissions()
 
-	-- 플레이어 캐릭터를 테이블 끝에 배치
+	-- 플레이어 캐릭터 배치
 	self:_positionPlayer(player)
+	if self.opponent then
+		self:_positionPlayer(self.opponent)
+	end
 
 	-- 매치 시작 알림
-	self.remotes.MatchStart:FireClient(player, {
+	local matchData = {
 		ballsPerPlayer = Config.GAME.BALLS_PER_PLAYER,
-		matchTime = Config.GAME.MATCH_TIME,
 		missions = self.missions,
-	})
+		opponentName = self.opponent and self.opponent.DisplayName or "AI",
+		opponentId = self.opponent and self.opponent.UserId or nil,
+	}
 
-	self:_startPlayerTurn()
+	self.remotes.MatchStart:FireClient(player, matchData)
+	if self.opponent then
+		local oppData = {
+			ballsPerPlayer = Config.GAME.BALLS_PER_PLAYER,
+			missions = self.missions,
+			opponentName = player.DisplayName,
+			opponentId = player.UserId,
+		}
+		self.remotes.MatchStart:FireClient(self.opponent, oppData)
+	end
+
+	-- 선턴에 따라 시작
+	if self.currentTurn == "player" then
+		self:_startPlayerTurn()
+	else
+		self:_executeAITurn()
+	end
 end
 
-function GameManager:_startPlayerTurn()
+function GameManager:_startPlayerTurn(isBonus: boolean?)
 	self.state = "PLAYER_TURN"
-	self.remotes.TurnChanged:FireClient(self.player, true, self.remainingBalls.player)
+	self:_fireClient("TurnChanged", self.player, true, self.remainingBalls.player, isBonus or false)
+	if self.opponent then
+		self:_fireClient("TurnChanged", self.opponent, false, self.remainingBalls.player, false)
+	end
 	self:_broadcastState()
 
 	-- 턴 제한시간 (타임아웃 = 공 소모 + 턴 넘김)
@@ -114,13 +132,11 @@ function GameManager:_startPlayerTurn()
 			self.remainingBalls.player -= 1
 			self:_broadcastState()
 
-			if self.player then
-				self.remotes.BallLanded:FireClient(self.player, {
-					zone = nil, slot = nil, team = "player",
-					points = 0, position = nil,
-					scores = self.scores, missions = self.missions, newMissions = {},
-				})
-			end
+			self:_fireAll("BallLanded", {
+				zone = nil, slot = nil, team = "player",
+				points = 0, position = nil,
+				scores = self.scores, missions = self.missions, newMissions = {},
+			})
 
 			task.wait(0.5)
 			self:_nextTurn()
@@ -129,12 +145,18 @@ function GameManager:_startPlayerTurn()
 end
 
 function GameManager:handleLaunch(player, direction: Vector3, power: number, spin: number?, spawnX: number?)
-	if self.state ~= "PLAYER_TURN" or player ~= self.player then
+	local team = nil
+
+	if self.state == "PLAYER_TURN" and player == self.player then
+		team = "player"
+	elseif self.state == "OPPONENT_TURN" and player == self.opponent then
+		team = "ai" -- 상대방은 내부적으로 "ai" 팀
+	else
 		return
 	end
-	if self.remainingBalls.player <= 0 then
-		return
-	end
+
+	local remaining = team == "player" and self.remainingBalls.player or self.remainingBalls.ai
+	if remaining <= 0 then return end
 
 	-- 턴 타이머 취소
 	if self.turnTimer then
@@ -146,47 +168,66 @@ function GameManager:handleLaunch(player, direction: Vector3, power: number, spi
 	spin = math.clamp(spin or 0, -1, 1)
 	spawnX = math.clamp(spawnX or 0, -Config.LAUNCH.SPAWN_X_RANGE, Config.LAUNCH.SPAWN_X_RANGE)
 
-	self.remainingBalls.player -= 1
+	if team == "player" then
+		self.remainingBalls.player -= 1
+	else
+		self.remainingBalls.ai -= 1
+	end
 	self.state = "BALL_MOVING"
 
 	task.spawn(function()
-		local ball = self:_createBall("player", spawnX)
+		local ball = self:_createBall(team, spawnX)
 		self:_launchBall(ball, direction, power, spin)
-		self.remotes.BallCreated:FireClient(player, ball)
-		self:_waitForSettle(ball, "player")
+		self:_fireAll("BallCreated", ball)
+		self:_waitForSettle(ball, team)
 	end)
 end
 
-function GameManager:_executeAITurn()
+function GameManager:_executeAITurn(isBonus: boolean?)
 	if self.remainingBalls.ai <= 0 then
 		self:_nextTurn()
 		return
 	end
 
+	-- PvP: 상대방 턴
+	if self.opponent then
+		self.state = "OPPONENT_TURN"
+		self:_fireClient("TurnChanged", self.player, false, self.remainingBalls.ai, isBonus or false)
+		self:_fireClient("TurnChanged", self.opponent, true, self.remainingBalls.ai, isBonus or false)
+		self:_broadcastState()
+
+		-- 턴 제한시간
+		self.turnTimer = task.delay(Config.GAME.TURN_TIME, function()
+			if self.state == "OPPONENT_TURN" then
+				self.remainingBalls.ai -= 1
+				self:_broadcastState()
+				self:_fireAll("BallLanded", {
+					zone = nil, slot = nil, team = "ai",
+					points = 0, position = nil,
+					scores = self.scores, missions = self.missions, newMissions = {},
+				})
+				task.wait(0.5)
+				self:_nextTurn()
+			end
+		end)
+		return
+	end
+
+	-- AI 대전
 	self.state = "AI_TURN"
-	self.remotes.TurnChanged:FireClient(self.player, false, self.remainingBalls.ai)
+	self:_fireClient("TurnChanged", self.player, false, self.remainingBalls.ai, isBonus or false)
 
 	task.spawn(function()
-		-- AI 결정 (spawnX도 함께 반환)
 		local direction, power, spin, aiSpawnX = self.ai:decide(self.slotOwners)
-
-		-- AI "생각" 시간 — 카메라가 발사 뷰로 전환하는 시간
 		task.wait(0.8)
-
-		-- AI 공 미리보기 위치 알림 (클라이언트에서 카메라 이동용)
-		if self.player then
-			self.remotes.TurnChanged:FireClient(self.player, false, self.remainingBalls.ai)
-		end
-
-		-- AI가 위치 고르는 연출 (잠시 대기)
+		self:_fireClient("TurnChanged", self.player, false, self.remainingBalls.ai)
 		task.wait(1.0)
 
 		self.remainingBalls.ai -= 1
 		local ball = self:_createBall("ai", aiSpawnX)
 		self:_launchBall(ball, direction, power, spin)
 
-		self.remotes.BallCreated:FireClient(self.player, ball)
-
+		self:_fireAll("BallCreated", ball)
 		self:_waitForSettle(ball, "ai")
 	end)
 end
@@ -360,8 +401,11 @@ function GameManager:_waitForSettle(ball: Part, team: string)
 	while tick() - startTime < Config.GAME.BALL_SETTLE_TIMEOUT do
 		task.wait(0.15)
 
+		-- 매치 종료 시 즉시 탈출
+		if self.state == "IDLE" or self.state == "MATCH_END" then return end
+
 		if not ball or not ball.Parent then
-			self:_checkLooseBalls() -- 다른 공도 체크
+			self:_checkLooseBalls()
 			self:_onBallResult(nil, nil, team, nil)
 			return
 		end
@@ -376,9 +420,9 @@ function GameManager:_waitForSettle(ball: Part, team: string)
 
 		local vel = ball.AssemblyLinearVelocity.Magnitude
 
-		if vel < 0.6 then
-			-- 0.8초 대기 후 재확인 (경사로 다시 미끄러질 수 있음)
-			task.wait(0.8)
+		if vel < 0.8 then
+			-- 1.2초 대기 후 재확인 (턱/포스트에 걸렸다 굴러갈 수 있음)
+			task.wait(1.2)
 			if not ball or not ball.Parent then
 				self:_checkLooseBalls()
 				self:_onBallResult(nil, nil, team, nil)
@@ -387,7 +431,7 @@ function GameManager:_waitForSettle(ball: Part, team: string)
 
 			-- 대기 후에도 여전히 움직이면 아직 settle 아님 → 루프 계속
 			local velAfter = ball.AssemblyLinearVelocity.Magnitude
-			if velAfter >= 0.6 then
+			if velAfter >= 0.5 then
 				continue
 			end
 
@@ -453,19 +497,17 @@ function GameManager:_checkLooseBalls()
 				self:_broadcastState()
 
 				-- 점수 팝업
-				if self.player then
-					self.remotes.BallLanded:FireClient(self.player, {
-						zone = zoneNum,
-						slot = slotIdx,
-						team = team,
-						points = Config.ZONES[zoneNum].BASE_POINTS,
-						position = ball.Position,
-						scores = self.scores,
-						missions = self.missions,
-						newMissions = newMissions,
-						playerLetters = self:_collectLetters("player"),
-					})
-				end
+				self:_fireAll("BallLanded", {
+					zone = zoneNum,
+					slot = slotIdx,
+					team = team,
+					points = Config.ZONES[zoneNum].BASE_POINTS,
+					position = ball.Position,
+					scores = self.scores,
+					missions = self.missions,
+					newMissions = newMissions,
+					playerLetters = self:_collectLetters("player"),
+				})
 				continue -- 이 공은 안착됨, looseBalls에서 제거
 			end
 		end
@@ -546,8 +588,20 @@ function GameManager:_onBallResult(zoneNum, slotIdx, team, ball)
 	pointsGained = pointsGained - missionBonus
 
 	-- 클라이언트에 결과 알림
-	if self.player then
-		self.remotes.BallLanded:FireClient(self.player, {
+	local landedData = {
+		zone = zoneNum,
+		slot = slotIdx,
+		team = team,
+		points = math.max(pointsGained, 0),
+		position = ball and ball.Position or nil,
+		scores = self.scores,
+		missions = self.missions,
+		newMissions = newMissions,
+		playerLetters = self:_collectLetters("player"),
+	}
+	self:_fireClient("BallLanded", self.player, landedData)
+	if self.opponent then
+		local oppLandedData = {
 			zone = zoneNum,
 			slot = slotIdx,
 			team = team,
@@ -556,22 +610,23 @@ function GameManager:_onBallResult(zoneNum, slotIdx, team, ball)
 			scores = self.scores,
 			missions = self.missions,
 			newMissions = newMissions,
-			playerLetters = self:_collectLetters("player"),
-		})
+			playerLetters = self:_collectLetters("ai"),
+		}
+		self:_fireClient("BallLanded", self.opponent, oppLandedData)
 	end
 
 	self:_broadcastState()
 
-	-- 슬롯 안착 성공 → 추가 턴!
 	task.wait(1)
+
+	-- 슬롯 안착 성공 → 보너스 턴!
 	if zoneNum and team == self.currentTurn then
-		-- 같은 팀 추가 턴 (공이 남아있으면)
 		local remaining = team == "player" and self.remainingBalls.player or self.remainingBalls.ai
 		if remaining > 0 then
 			if team == "player" then
-				self:_startPlayerTurn()
+				self:_startPlayerTurn(true) -- 보너스 턴
 			else
-				self:_executeAITurn()
+				self:_executeAITurn(true) -- AI 보너스 턴
 			end
 			return
 		end
@@ -753,9 +808,6 @@ end
 
 function GameManager:_endMatch()
 	self.state = "MATCH_END"
-
-	-- 타이머 0으로 고정
-	self.matchTimer = 0
 	self:_broadcastState()
 
 	local winner
@@ -767,20 +819,37 @@ function GameManager:_endMatch()
 		winner = "draw"
 	end
 
-	if self.player then
-		self.remotes.MatchEnd:FireClient(self.player, {
-			winner = winner,
-			scores = self.scores,
-		})
-	end
+	self:_fireAll("MatchEnd", {
+		winner = winner,
+		scores = self.scores,
+	})
 
-	-- 5초 후 자동 재시작
+	-- 5초 후 정리 (클라이언트에서 로비로 복귀)
 	task.delay(5, function()
-		if self.player and self.player.Parent then
-			self:_cleanupBalls()
-			self:startMatch(self.player)
+		self:_cleanupBalls()
+		self.state = "IDLE"
+		if self.onMatchEnd then
+			self.onMatchEnd()
 		end
 	end)
+end
+
+function GameManager:forceEndMatch()
+	if self.state == "IDLE" or self.state == "MATCH_END" then return end
+
+	-- 턴 타이머 취소
+	if self.turnTimer then
+		task.cancel(self.turnTimer)
+		self.turnTimer = nil
+	end
+
+	self.state = "MATCH_END"
+	self:_cleanupBalls()
+	self.state = "IDLE"
+
+	if self.onMatchEnd then
+		self.onMatchEnd()
+	end
 end
 
 function GameManager:_cleanupBalls()
@@ -809,20 +878,45 @@ function GameManager:_cleanupBalls()
 	end
 end
 
-function GameManager:_broadcastState()
-	if not self.player then
-		return
+-- 양쪽 클라이언트에 이벤트 발신 헬퍼
+function GameManager:_fireClient(remoteName, player, ...)
+	if player and player.Parent then
+		self.remotes[remoteName]:FireClient(player, ...)
 	end
+end
 
-	self.remotes.GameStateUpdate:FireClient(self.player, {
+function GameManager:_fireAll(remoteName, ...)
+	self:_fireClient(remoteName, self.player, ...)
+	if self.opponent then
+		self:_fireClient(remoteName, self.opponent, ...)
+	end
+end
+
+function GameManager:_broadcastState()
+	if not self.player then return end
+
+	local data = {
 		scores = self.scores,
 		remainingBalls = self.remainingBalls,
 		currentTurn = self.currentTurn,
-		timer = self.matchTimer,
 		state = self.state,
 		missions = self.missions,
 		playerLetters = self:_collectLetters("player"),
-	})
+	}
+
+	self:_fireClient("GameStateUpdate", self.player, data)
+	if self.opponent then
+		-- 상대에게도 같은 데이터 (상대의 레터 진행도 포함)
+		local oppData = {
+			scores = self.scores,
+			remainingBalls = self.remainingBalls,
+			currentTurn = self.currentTurn,
+			state = self.state,
+			missions = self.missions,
+			playerLetters = self:_collectLetters("ai"),
+		}
+		self:_fireClient("GameStateUpdate", self.opponent, oppData)
+	end
 end
 
 function GameManager:_positionPlayer(player)
