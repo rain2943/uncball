@@ -149,7 +149,9 @@ function GameManager:_startPlayerTurn(isBonus: boolean?)
 
 	-- 턴 제한시간 (타임아웃 = 공 소모 + 턴 넘김)
 	self.turnTimer = task.delay(Config.GAME.TURN_TIME, function()
+		if self._destroyed then return end
 		if self.state == "PLAYER_TURN" then
+			print("[Uncball] Player turn timeout! Remaining:", self.remainingBalls.player - 1)
 			self.remainingBalls.player -= 1
 			self:_broadcastState()
 
@@ -228,7 +230,9 @@ function GameManager:_executeAITurn(isBonus: boolean?)
 
 		-- 턴 제한시간
 		self.turnTimer = task.delay(Config.GAME.TURN_TIME, function()
+			if self._destroyed then return end
 			if self.state == "OPPONENT_TURN" then
+				print("[Uncball] Opponent turn timeout! Remaining:", self.remainingBalls.ai - 1)
 				self.remainingBalls.ai -= 1
 				self:_broadcastState()
 				self:_fireClient("BallLanded", self.player, {
