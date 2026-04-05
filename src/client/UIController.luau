@@ -324,7 +324,7 @@ function UIController:_createScoreBoard(gui)
 	self.elements.blueScore = blueScore
 
 	-- ===== 캐릭터 상반신 뷰포트 (스코어보드 양쪽 위) =====
-	local CHAR_VP_W, CHAR_VP_H = 70, 85
+	local CHAR_VP_W, CHAR_VP_H = 90, 110
 
 	-- 내 캐릭터 (왼쪽)
 	local myCharVP = Instance.new("ViewportFrame")
@@ -418,10 +418,10 @@ function UIController:_loadCharIntoViewport(viewport: ViewportFrame, worldModel,
 		-- 카메라 (상반신 클로즈업)
 		local xDir = facingRight and -1 or 1
 		local cam = Instance.new("Camera")
-		cam.FieldOfView = 30
+		cam.FieldOfView = 20
 		cam.CFrame = CFrame.lookAt(
-			Vector3.new(0.5 * xDir, 1.7, -3),
-			Vector3.new(0, 1.4, 0)
+			Vector3.new(1.5 * xDir, 1.2, -5),
+			Vector3.new(0, 1.0, 0)
 		)
 		cam.Parent = viewport
 		viewport.CurrentCamera = cam
