@@ -263,13 +263,13 @@ remoteEvents.MatchEnd.OnClientEvent:Connect(function(data)
 	destroyOppGuideDots()
 	ui:hideTurnTimer()
 	ui:hideLaunchGuide()
-	currentTableOffset = Vector3.zero
-	camera:setTableOffset(Vector3.zero)
-	launch:setTableOffset(Vector3.zero)
 
 	-- 강제 종료 (PvP 전환 등) → 결과 화면 없이 즉시 정리
 	if data.forced then
 		ui:hide()
+		currentTableOffset = Vector3.zero
+		camera:setTableOffset(Vector3.zero)
+		launch:setTableOffset(Vector3.zero)
 		return
 	end
 
@@ -277,6 +277,8 @@ remoteEvents.MatchEnd.OnClientEvent:Connect(function(data)
 	if data.disconnected then
 		ui:setOpponentName("Leave!")
 	end
+	-- 카메라를 OVERVIEW에 유지한 채 결과 화면 표시
+	camera:returnToOverview()
 	ui:showMatchResult(data.winner, data.scores)
 
 	-- 5초 후 암전 → 로비 복귀
@@ -285,6 +287,10 @@ remoteEvents.MatchEnd.OnClientEvent:Connect(function(data)
 
 		ui:hide()
 		lobby:show()
+		-- 로비 전환 시점에 오프셋 리셋
+		currentTableOffset = Vector3.zero
+		camera:setTableOffset(Vector3.zero)
+		launch:setTableOffset(Vector3.zero)
 		camera:enterLobbyView()
 
 		-- BGM 정지
