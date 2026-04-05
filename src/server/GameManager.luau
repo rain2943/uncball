@@ -61,10 +61,13 @@ function GameManager:init(remotes, tableOffset: Vector3?)
 	-- AI 초기화
 	self.ai = AIPlayer.new(self.slotPositions)
 
+	self._destroyed = false
+
 	-- 타이머 + looseBall 체크 루프
 	task.spawn(function()
-		while true do
+		while not self._destroyed do
 			task.wait(1)
+			if self._destroyed then break end
 			-- 주기적으로 미안착 공 체크
 			if #self.looseBalls > 0 then
 				self:_checkLooseBalls()
@@ -870,6 +873,8 @@ function GameManager:_endMatch()
 
 	-- 5초 후 정리 (클라이언트에서 로비로 복귀)
 	task.delay(5, function()
+		if self._destroyed then return end -- 이미 forceEndMatch로 정리됨
+		self._destroyed = true
 		self:_cleanupBalls()
 		self.state = "IDLE"
 		if self.onMatchEnd then
@@ -909,7 +914,13 @@ function GameManager:_waitAllBallsSettled()
 end
 
 function GameManager:forceEndMatch()
-	if self.state == "IDLE" or self.state == "MATCH_END" then return end
+	if self._destroyed then return end
+	if self.state == "IDLE" or self.state == "MATCH_END" then
+		self._destroyed = true
+		self:_cleanupBalls()
+		if self.onMatchEnd then self.onMatchEnd() end
+		return
+	end
 
 	-- 턴 타이머 취소
 	if self.turnTimer then
@@ -919,6 +930,7 @@ function GameManager:forceEndMatch()
 
 	-- 즉시 IDLE로 (모든 _waitForSettle 루프가 탈출)
 	self.state = "IDLE"
+	self._destroyed = true
 	self.player = nil
 	self.opponent = nil
 	self:_cleanupBalls()

@@ -263,9 +263,18 @@ remoteEvents.MatchEnd.OnClientEvent:Connect(function(data)
 	inMatch = false
 	launch:setEnabled(false)
 	destroyOppGuideDots()
+	ui:hideTurnTimer()
+	ui:hideLaunchGuide()
 	currentTableOffset = Vector3.zero
 	camera:setTableOffset(Vector3.zero)
 	launch:setTableOffset(Vector3.zero)
+
+	-- 강제 종료 (PvP 전환 등) → 결과 화면 없이 즉시 정리
+	if data.forced then
+		ui:hide()
+		return
+	end
+
 	-- 상대 퇴장 시 "Leave!" 표시
 	if data.disconnected then
 		ui:setOpponentName("Leave!")

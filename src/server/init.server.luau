@@ -20,7 +20,7 @@ end
 local usedTableSlots = {} -- [slotIndex] = true
 
 local function allocateTableSlot(): (number?, Vector3?)
-	for i = 0, 9 do
+	for i = 0, 14 do
 		if not usedTableSlots[i] then
 			usedTableSlots[i] = true
 			return i, Vector3.new(i * Config.TABLE_SPACING, 0, 0)
@@ -107,14 +107,17 @@ local function startPvPMatch(player1, player2)
 		return
 	end
 
-	-- 기존 AI 매치 강제 종료
-	if playerGMs[player1] then
-		playerGMs[player1]:forceEndMatch()
-		playerGMs[player1] = nil
-	end
-	if playerGMs[player2] then
-		playerGMs[player2]:forceEndMatch()
-		playerGMs[player2] = nil
+	-- 기존 AI 매치 강제 종료 (클라이언트 UI 정리용 MatchEnd 전송)
+	for _, p in { player1, player2 } do
+		if playerGMs[p] then
+			remoteEvents.MatchEnd:FireClient(p, {
+				winner = "draw",
+				scores = playerGMs[p].scores,
+				forced = true, -- 클라이언트에서 즉시 전환 (결과 화면 스킵)
+			})
+			playerGMs[p]:forceEndMatch()
+			playerGMs[p] = nil
+		end
 	end
 
 	-- 새 PvP 매치
