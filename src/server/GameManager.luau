@@ -75,6 +75,7 @@ function GameManager:startMatch(player, opponent)
 	self.currentTurn = opponent and (math.random() < 0.5 and "player" or "ai") or "player"
 	self.settledBalls = {}
 	self.looseBalls = {}
+	self._lastTurn = false
 
 	for zoneNum = 1, 3 do
 		self.slotOwners[zoneNum] = {}
@@ -635,33 +636,47 @@ function GameManager:_onBallResult(zoneNum, slotIdx, team, ball)
 end
 
 function GameManager:_nextTurn()
-	-- 매치 종료 조건
+	-- 양쪽 다 0 → 즉시 종료
 	if self.remainingBalls.player <= 0 and self.remainingBalls.ai <= 0 then
 		self:_endMatch()
 		return
 	end
 
-	-- 턴 교대
-	if self.currentTurn == "player" then
-		self.currentTurn = "ai"
+	-- 현재 턴 팀의 공이 0이면 → 상대에게 마지막 1턴 후 종료
+	-- (선턴 불이익 보정: 내가 선턴이고 공 다 쓰면 상대도 1번 더 던지고 끝)
+	if self.currentTurn == "player" and self.remainingBalls.player <= 0 then
 		if self.remainingBalls.ai > 0 then
+			self.currentTurn = "ai"
+			self._lastTurn = true
 			self:_executeAITurn()
 		else
-			self.currentTurn = "player"
-			self:_startPlayerTurn()
+			self:_endMatch()
 		end
-	else
-		self.currentTurn = "player"
+		return
+	elseif self.currentTurn == "ai" and self.remainingBalls.ai <= 0 then
 		if self.remainingBalls.player > 0 then
+			self.currentTurn = "player"
+			self._lastTurn = true
 			self:_startPlayerTurn()
 		else
-			self.currentTurn = "ai"
-			if self.remainingBalls.ai > 0 then
-				self:_executeAITurn()
-			else
-				self:_endMatch()
-			end
+			self:_endMatch()
 		end
+		return
+	end
+
+	-- 이전에 마지막 턴이 주어졌으면 → 종료
+	if self._lastTurn then
+		self:_endMatch()
+		return
+	end
+
+	-- 일반 턴 교대
+	if self.currentTurn == "player" then
+		self.currentTurn = "ai"
+		self:_executeAITurn()
+	else
+		self.currentTurn = "player"
+		self:_startPlayerTurn()
 	end
 end
 
