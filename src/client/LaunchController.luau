@@ -80,6 +80,10 @@ function LaunchController.new(remotes, uiController)
 	self.guideDots = {}
 	self.spawnY = Config.TABLE.HEIGHT + Config.TABLE.THICKNESS / 2 + Config.BALL.RADIUS + 0.2
 
+	-- PvP 프리뷰 전송 쓰로틀
+	self._lastPreviewSend = 0
+	self._lastSentX = nil
+
 	-- 타이밍 커서
 	self.timingPos = 0 -- 0~(NUM_GUIDE_DOTS*2) 왕복 위치
 	self.timingDirection = 1 -- 1=전진, -1=후진
@@ -102,7 +106,7 @@ function LaunchController:_createPreview()
 	preview.Name = "PreviewBall"
 	preview.Shape = Enum.PartType.Ball
 	preview.Size = Vector3.one * Config.BALL.RADIUS * 2
-	preview.Color = Config.BALL.COLORS.RED
+	preview.Color = self.teamColor or Config.BALL.COLORS.RED
 	preview.Material = Enum.Material.Marble
 	preview.Transparency = 1
 	preview.Anchored = true
@@ -253,6 +257,13 @@ end
 
 -- ===== 입력 =====
 
+function LaunchController:setTeamColor(color: Color3)
+	self.teamColor = color
+	if self.previewBall then
+		self.previewBall.Color = color
+	end
+end
+
 function LaunchController:setEnabled(enabled: boolean)
 	if enabled then
 		self.state = "READY"
@@ -380,6 +391,13 @@ function LaunchController:_setupInput()
 			-- 카메라도 따라감
 			if self.cameraController then
 				self.cameraController:setLaunchFollowX(self.spawnX)
+			end
+			-- PvP: 상대에게 위치 전송 (0.1초 쓰로틀)
+			local now = tick()
+			if now - self._lastPreviewSend > 0.1 and self._lastSentX ~= self.spawnX then
+				self._lastPreviewSend = now
+				self._lastSentX = self.spawnX
+				self.remotes.PreviewUpdate:FireServer(self.spawnX)
 			end
 		end
 	end)

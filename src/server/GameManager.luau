@@ -98,6 +98,7 @@ function GameManager:startMatch(player, opponent)
 		missions = self.missions,
 		opponentName = self.opponent and self.opponent.DisplayName or "AI",
 		opponentId = self.opponent and self.opponent.UserId or nil,
+		teamColor = "red",
 	}
 
 	self.remotes.MatchStart:FireClient(player, matchData)
@@ -107,6 +108,7 @@ function GameManager:startMatch(player, opponent)
 			missions = self.missions,
 			opponentName = player.DisplayName,
 			opponentId = player.UserId,
+			teamColor = "blue",
 		}
 		self.remotes.MatchStart:FireClient(self.opponent, oppData)
 	end

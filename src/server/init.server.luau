@@ -158,6 +158,23 @@ end
 
 -- === 이벤트 핸들러 ===
 
+-- 프리뷰 위치 릴레이 (PvP: 상대에게 공 위치 전달)
+remoteEvents.PreviewUpdate.OnServerEvent:Connect(function(player, spawnX)
+	if typeof(spawnX) ~= "number" then return end
+	local gm = playerGMs[player]
+	if not gm then return end
+	-- 상대에게 전달
+	local target = nil
+	if gm.player == player and gm.opponent then
+		target = gm.opponent
+	elseif gm.opponent == player then
+		target = gm.player
+	end
+	if target and target.Parent then
+		remoteEvents.PreviewUpdate:FireClient(target, spawnX)
+	end
+end)
+
 -- 발사 요청 → 해당 플레이어의 GM에 전달
 remoteEvents.RequestLaunch.OnServerEvent:Connect(function(player, direction, power, spin, spawnX)
 	local gm = playerGMs[player]
@@ -265,5 +282,59 @@ Players.PlayerRemoving:Connect(function(player)
 		cancelPendingMatch(player)
 	end
 end)
+
+-- 새 플레이어 접속 시 캐릭터를 경기장 밖에 숨기기
+local function hidePlayerCharacter(player)
+	local char = player.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		hrp.Anchored = true
+		hrp.CFrame = CFrame.new(0, 500, 0) -- 경기장 한참 위
+	end
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid.WalkSpeed = 0
+		humanoid.JumpPower = 0
+		humanoid.JumpHeight = 0
+	end
+	for _, obj in char:GetDescendants() do
+		if obj:IsA("BasePart") then
+			obj.Transparency = 1
+			obj.CanCollide = false
+			obj.CanQuery = false
+			obj.CanTouch = false
+		elseif obj:IsA("Decal") or obj:IsA("Texture") then
+			obj.Transparency = 1
+		end
+	end
+end
+
+Players.PlayerAdded:Connect(function(player)
+	player.CharacterAdded:Connect(function(char)
+		-- 캐릭터 로드 후 즉시 숨기기
+		task.wait(0.1)
+		if not playerGMs[player] then
+			hidePlayerCharacter(player)
+		end
+	end)
+	-- 이미 캐릭터가 있으면 바로 숨기기
+	if player.Character then
+		hidePlayerCharacter(player)
+	end
+end)
+
+-- 이미 접속한 플레이어 처리 (Studio)
+for _, player in Players:GetPlayers() do
+	if player.Character then
+		hidePlayerCharacter(player)
+	end
+	player.CharacterAdded:Connect(function()
+		task.wait(0.1)
+		if not playerGMs[player] then
+			hidePlayerCharacter(player)
+		end
+	end)
+end
 
 print("[Uncball] Server initialized - lobby mode")

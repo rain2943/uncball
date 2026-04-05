@@ -92,6 +92,9 @@ local function fadeFromBlack(duration: number?)
 	tween.Completed:Wait()
 end
 
+-- 매치 상태 추적
+local inMatch = false
+
 -- 초기 상태: 로비 보이기, HUD 숨기기
 ui:hide()
 lobby:show()
@@ -142,8 +145,14 @@ end
 -- === 이벤트 핸들러 ===
 
 remoteEvents.MatchStart.OnClientEvent:Connect(function(data)
+	inMatch = true
+
 	-- 매칭 팝업 닫기 (PvP 매치일 경우)
 	ui:hideMatchFoundPopup()
+
+	-- 팀 색상 설정
+	local myColor = data.teamColor == "blue" and Config.BALL.COLORS.BLUE or Config.BALL.COLORS.RED
+	launch:setTeamColor(myColor)
 
 	-- HUD 즉시 초기화 (로비 UI가 위에 덮고 있으므로 안 보임)
 	ui:show()
@@ -178,6 +187,7 @@ remoteEvents.MatchStart.OnClientEvent:Connect(function(data)
 end)
 
 remoteEvents.TurnChanged.OnClientEvent:Connect(function(isPlayerTurn, _remainingBalls, isBonus)
+	if not inMatch then return end
 	ui:setTurn(isPlayerTurn, isBonus)
 	launch:setEnabled(isPlayerTurn)
 	camera:enterLaunchView()
@@ -230,6 +240,7 @@ remoteEvents.BallLanded.OnClientEvent:Connect(function(data)
 end)
 
 remoteEvents.MatchEnd.OnClientEvent:Connect(function(data)
+	inMatch = false
 	launch:setEnabled(false)
 	ui:showMatchResult(data.winner, data.scores)
 
@@ -263,6 +274,61 @@ end)
 -- 매칭 취소됨 (상대가 취소 또는 내가 취소)
 remoteEvents.MatchCancelled.OnClientEvent:Connect(function()
 	ui:hideMatchFoundPopup()
+end)
+
+-- === PvP 상대 프리뷰 ===
+local opponentPreview = nil
+local opponentTeamColor = Config.BALL.COLORS.BLUE
+
+-- 상대 프리뷰 공 생성/이동
+remoteEvents.PreviewUpdate.OnClientEvent:Connect(function(spawnX)
+	if not inMatch then return end
+
+	local spawnY = Config.TABLE.HEIGHT + Config.TABLE.THICKNESS / 2 + Config.BALL.RADIUS + 0.2
+
+	if not opponentPreview or not opponentPreview.Parent then
+		opponentPreview = Instance.new("Part")
+		opponentPreview.Name = "OpponentPreview"
+		opponentPreview.Shape = Enum.PartType.Ball
+		opponentPreview.Size = Vector3.one * Config.BALL.RADIUS * 2
+		opponentPreview.Color = opponentTeamColor
+		opponentPreview.Material = Enum.Material.Marble
+		opponentPreview.Transparency = 0.4
+		opponentPreview.Anchored = true
+		opponentPreview.CanCollide = false
+		opponentPreview.CanQuery = false
+		opponentPreview.CanTouch = false
+		opponentPreview.Parent = workspace
+	end
+
+	opponentPreview.Position = Vector3.new(spawnX, spawnY, Config.LAUNCH.SPAWN_Z)
+	-- 카메라도 따라감
+	camera:setLaunchFollowX(spawnX)
+end)
+
+-- 상대 공 발사되면 프리뷰 숨기기
+remoteEvents.BallCreated.OnClientEvent:Connect(function()
+	if opponentPreview and opponentPreview.Parent then
+		opponentPreview:Destroy()
+		opponentPreview = nil
+	end
+end)
+
+-- MatchStart에서 상대 팀 색상 저장
+remoteEvents.MatchStart.OnClientEvent:Connect(function(data)
+	if data.teamColor == "blue" then
+		opponentTeamColor = Config.BALL.COLORS.RED
+	else
+		opponentTeamColor = Config.BALL.COLORS.BLUE
+	end
+end)
+
+-- 매치 종료 시 프리뷰 정리
+remoteEvents.MatchEnd.OnClientEvent:Connect(function()
+	if opponentPreview and opponentPreview.Parent then
+		opponentPreview:Destroy()
+		opponentPreview = nil
+	end
 end)
 
 print("[Uncball] Client initialized - lobby mode")

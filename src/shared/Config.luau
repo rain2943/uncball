@@ -171,6 +171,7 @@ Config.REMOTES = {
 	"MatchFound",
 	"CancelMatchmaking",
 	"MatchCancelled",
+	"PreviewUpdate",
 }
 
 return Config
