@@ -225,7 +225,7 @@ src/
 - TABLE: 90×25, HEIGHT=3
 - ZONES: Z=-12, 6, 24
 - BALL: RADIUS=0.5, DENSITY=3.5
-- GAME: **10 balls**, 30s turn, settle_timeout=**15s**
+- GAME: **10 balls**, 30s turn, settle_timeout=**8s**, all_balls_settle_max=**12s**
 - LAUNCH: MIN=20, MAX=54, SPAWN_Z=-40, X_RANGE=**11**
 - SPIN: MAX_LATERAL_FORCE=40, SENSITIVITY=**0.006**, DEADZONE=**20px**
 - AI: SKILL=0.65, ZONE_PRESETS={Z1:31, Z2:40, Z3:47}
@@ -236,8 +236,19 @@ src/
 ## PvP Preview System
 - 상대 턴 시 상대의 공 위치 조정이 실시간으로 보임 (0.1초 쓰로틀)
 - 상대 팀 색 반투명 프리뷰 공 표시 + 카메라 따라감
-- 가이드 도트/타이밍/스핀 인디케이터는 상대에게 안 보임
+- 가이드 도트/스핀 인디케이터는 상대에게 안 보임
+- **타이밍 판정은 상대에게도 표시** (Perfect!/Good 등 릴레이)
 - 발사 시 프리뷰 자동 정리
+
+## Ball Settle Guard
+- 턴 넘기기 전 모든 공 정지 2단계 확인 (vel<0.4 → 1초 대기 → 재확인)
+- 턱 걸림 후 다시 굴러내리는 경우 방지
+- 최대 12초 대기 후 강제 진행
+
+## Launch Guide (온보딩)
+- 매 턴 시작 시 공 아래에 ↓ 바운스 화살표 + "Pull down" + ← → 표시
+- 공 터치 시 즉시 사라짐
+- FredokaOne + UIStroke 테마 일관
 
 ## Remotes
 RequestLaunch, GameStateUpdate, BallLanded, TurnChanged, MatchStart, MatchEnd, BallCreated, RequestMatch, MatchFound, CancelMatchmaking, MatchCancelled, PreviewUpdate
