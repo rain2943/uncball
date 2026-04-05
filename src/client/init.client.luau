@@ -194,6 +194,10 @@ remoteEvents.TurnChanged.OnClientEvent:Connect(function(isPlayerTurn, _remaining
 	camera:enterLaunchView()
 	if isPlayerTurn then
 		playSound("rbxassetid://127421479045055", 0.5)
+		-- 온보딩 가이드 표시 (공 터치하면 사라짐)
+		ui:showLaunchGuide()
+	else
+		ui:hideLaunchGuide()
 	end
 end)
 
@@ -279,6 +283,15 @@ end)
 -- 매칭 취소됨 (상대가 취소 또는 내가 취소)
 remoteEvents.MatchCancelled.OnClientEvent:Connect(function()
 	ui:hideMatchFoundPopup()
+end)
+
+-- === PvP 타이밍 등급 수신 ===
+remoteEvents.TimingGrade.OnClientEvent:Connect(function(gradeName, colorArr)
+	if not inMatch then return end
+	if typeof(colorArr) == "table" and #colorArr >= 3 then
+		local color = Color3.new(colorArr[1], colorArr[2], colorArr[3])
+		ui:showTimingGrade(gradeName, color)
+	end
 end)
 
 -- === PvP 상대 프리뷰 ===

@@ -66,7 +66,7 @@ Config.GAME = {
 	BALLS_PER_PLAYER = 10,
 	TURN_TIME = 30,
 	BALL_SETTLE_VELOCITY = 0.3,
-	BALL_SETTLE_TIMEOUT = 15,
+	BALL_SETTLE_TIMEOUT = 8,
 	BALL_OUT_Y = -5,
 	CONSECUTIVE_BONUS = { [2] = 1, [3] = 3, [4] = 6, [5] = 10, [6] = 15, [7] = 21 },
 }
@@ -172,6 +172,7 @@ Config.REMOTES = {
 	"CancelMatchmaking",
 	"MatchCancelled",
 	"PreviewUpdate",
+	"TimingGrade",
 }
 
 return Config

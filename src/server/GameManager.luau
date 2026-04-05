@@ -622,6 +622,9 @@ function GameManager:_onBallResult(zoneNum, slotIdx, team, ball)
 
 	task.wait(1)
 
+	-- 턴 넘기기 전 모든 공이 멈출 때까지 대기
+	self:_waitAllBallsSettled()
+
 	-- 슬롯 안착 성공 → 보너스 턴!
 	if zoneNum and team == self.currentTurn then
 		local remaining = team == "player" and self.remainingBalls.player or self.remainingBalls.ai
@@ -851,6 +854,44 @@ function GameManager:_endMatch()
 	end)
 end
 
+-- 테이블 위 모든 공이 완전히 멈출 때까지 대기 (최대 6초)
+function GameManager:_waitAllBallsSettled()
+	local maxWait = 12
+	local startTime = tick()
+
+	local function anyBallMoving(): boolean
+		for _, entry in self.looseBalls do
+			if entry.ball and entry.ball.Parent and entry.ball.AssemblyLinearVelocity.Magnitude > 0.4 then
+				return true
+			end
+		end
+		for _, child in workspace:GetChildren() do
+			if child:IsA("Part") and child.Shape == Enum.PartType.Ball
+				and (child.Name == "PlayerBall" or child.Name == "AIBall")
+				and not child.Anchored
+				and child.AssemblyLinearVelocity.Magnitude > 0.4 then
+				return true
+			end
+		end
+		return false
+	end
+
+	while tick() - startTime < maxWait do
+		if self.state == "IDLE" or self.state == "MATCH_END" then return end
+
+		if not anyBallMoving() then
+			-- 멈춘 것 같으면 1초 더 기다린 뒤 재확인 (턱에서 다시 굴러내리는 경우 방지)
+			task.wait(1)
+			if self.state == "IDLE" or self.state == "MATCH_END" then return end
+			if not anyBallMoving() then
+				return -- 진짜 멈춤
+			end
+			-- 다시 움직이기 시작함 → 루프 계속
+		end
+		task.wait(0.2)
+	end
+end
+
 function GameManager:forceEndMatch()
 	if self.state == "IDLE" or self.state == "MATCH_END" then return end
 
@@ -860,9 +901,11 @@ function GameManager:forceEndMatch()
 		self.turnTimer = nil
 	end
 
-	self.state = "MATCH_END"
-	self:_cleanupBalls()
+	-- 즉시 IDLE로 (모든 _waitForSettle 루프가 탈출)
 	self.state = "IDLE"
+	self.player = nil
+	self.opponent = nil
+	self:_cleanupBalls()
 
 	if self.onMatchEnd then
 		self.onMatchEnd()

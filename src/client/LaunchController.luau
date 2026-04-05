@@ -294,6 +294,10 @@ function LaunchController:_setupInput()
 				if self.previewBall then
 					self.previewBall.Transparency = 0.1
 				end
+				-- 온보딩 가이드 숨기기
+				if self.ui and self.ui.hideLaunchGuide then
+					self.ui:hideLaunchGuide()
+				end
 			end
 		end
 
@@ -460,6 +464,9 @@ function LaunchController:_launch()
 	if self.ui then
 		self.ui:showTimingGrade(gradeName, gradeColor)
 	end
+
+	-- PvP: 상대에게 타이밍 등급 전달
+	self.remotes.TimingGrade:FireServer(gradeName, {gradeColor.R, gradeColor.G, gradeColor.B})
 
 	self.power = 0
 	self.spin = 0

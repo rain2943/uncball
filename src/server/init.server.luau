@@ -158,6 +158,23 @@ end
 
 -- === 이벤트 핸들러 ===
 
+-- 타이밍 등급 릴레이 (PvP: 상대에게 판정 전달)
+remoteEvents.TimingGrade.OnServerEvent:Connect(function(player, gradeName, colorArr)
+	if typeof(gradeName) ~= "string" then return end
+	if typeof(colorArr) ~= "table" then return end
+	local gm = playerGMs[player]
+	if not gm then return end
+	local target = nil
+	if gm.player == player and gm.opponent then
+		target = gm.opponent
+	elseif gm.opponent == player then
+		target = gm.player
+	end
+	if target and target.Parent then
+		remoteEvents.TimingGrade:FireClient(target, gradeName, colorArr)
+	end
+end)
+
 -- 프리뷰 위치 릴레이 (PvP: 상대에게 공 위치 전달)
 remoteEvents.PreviewUpdate.OnServerEvent:Connect(function(player, spawnX)
 	if typeof(spawnX) ~= "number" then return end

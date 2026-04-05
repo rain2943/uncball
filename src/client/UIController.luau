@@ -1408,6 +1408,103 @@ function UIController:hideResult()
 	self.elements.resultFrame.Visible = false
 end
 
+-- ===== 온보딩 가이드 (매 턴, 공 아래 화살표 + Pull down) =====
+function UIController:showLaunchGuide()
+	self:hideLaunchGuide()
+
+	local guide = Instance.new("Frame")
+	guide.Name = "LaunchGuide"
+	guide.Size = UDim2.new(0, 160, 0, 100)
+	guide.Position = UDim2.new(0.5, -80, 0.72, 0)
+	guide.BackgroundTransparency = 1
+	guide.ZIndex = 8
+	guide.Parent = self.gui
+
+	-- 아래 화살표 ↓
+	local arrow = Instance.new("TextLabel")
+	arrow.Name = "Arrow"
+	arrow.Size = UDim2.new(1, 0, 0, 36)
+	arrow.Position = UDim2.new(0, 0, 0, 0)
+	arrow.BackgroundTransparency = 1
+	arrow.Text = "↓"
+	arrow.TextColor3 = Color3.fromRGB(255, 255, 255)
+	arrow.Font = FONT_TITLE
+	arrow.TextSize = 36
+	arrow.ZIndex = 9
+	arrow.Parent = guide
+	addStroke(arrow, Color3.fromRGB(0, 0, 0), 2)
+
+	-- "Pull down" 텍스트
+	local pullText = Instance.new("TextLabel")
+	pullText.Name = "PullText"
+	pullText.Size = UDim2.new(1, 0, 0, 22)
+	pullText.Position = UDim2.new(0, 0, 0, 38)
+	pullText.BackgroundTransparency = 1
+	pullText.Text = "Pull down"
+	pullText.TextColor3 = Color3.fromRGB(255, 255, 255)
+	pullText.Font = FONT_BOLD
+	pullText.TextScaled = true
+	pullText.ZIndex = 9
+	pullText.Parent = guide
+	addStroke(pullText, Color3.fromRGB(0, 0, 0), 2)
+
+	-- 좌우 화살표 ← →
+	local lrRow = Instance.new("Frame")
+	lrRow.Size = UDim2.new(1, 0, 0, 24)
+	lrRow.Position = UDim2.new(0, 0, 0, 66)
+	lrRow.BackgroundTransparency = 1
+	lrRow.ZIndex = 8
+	lrRow.Parent = guide
+
+	local leftArrow = Instance.new("TextLabel")
+	leftArrow.Size = UDim2.new(0, 30, 1, 0)
+	leftArrow.Position = UDim2.new(0.15, 0, 0, 0)
+	leftArrow.BackgroundTransparency = 1
+	leftArrow.Text = "←"
+	leftArrow.TextColor3 = Color3.fromRGB(200, 220, 255)
+	leftArrow.Font = FONT_BOLD
+	leftArrow.TextSize = 22
+	leftArrow.ZIndex = 9
+	leftArrow.Parent = lrRow
+	addStroke(leftArrow, Color3.fromRGB(0, 0, 0), 1.5)
+
+	local rightArrow = Instance.new("TextLabel")
+	rightArrow.Size = UDim2.new(0, 30, 1, 0)
+	rightArrow.Position = UDim2.new(0.7, 0, 0, 0)
+	rightArrow.BackgroundTransparency = 1
+	rightArrow.Text = "→"
+	rightArrow.TextColor3 = Color3.fromRGB(200, 220, 255)
+	rightArrow.Font = FONT_BOLD
+	rightArrow.TextSize = 22
+	rightArrow.ZIndex = 9
+	rightArrow.Parent = lrRow
+	addStroke(rightArrow, Color3.fromRGB(0, 0, 0), 1.5)
+
+	self.elements.launchGuide = guide
+
+	-- 아래 화살표 위아래 바운스 애니메이션
+	task.spawn(function()
+		while guide and guide.Parent do
+			TweenService:Create(arrow, TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+				Position = UDim2.new(0, 0, 0, 10),
+			}):Play()
+			task.wait(0.5)
+			if not guide or not guide.Parent then break end
+			TweenService:Create(arrow, TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+				Position = UDim2.new(0, 0, 0, 0),
+			}):Play()
+			task.wait(0.5)
+		end
+	end)
+end
+
+function UIController:hideLaunchGuide()
+	if self.elements.launchGuide then
+		self.elements.launchGuide:Destroy()
+		self.elements.launchGuide = nil
+	end
+end
+
 function UIController:showMatchResult(winner: string, scores)
 	self.elements.resultFrame.Visible = true
 

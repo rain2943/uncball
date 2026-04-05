@@ -412,11 +412,11 @@ function LobbyController:_loadCharacter()
 	-- 카메라 새로 생성 (ViewportFrame 카메라 갱신 보장)
 	if self.vpCam then self.vpCam:Destroy() end
 	local newCam = Instance.new("Camera")
-	-- PC/모바일 공용: 전신 풀샷 (모델 Y=3 기준, 발~머리 = Y0.5~Y5.5)
-	newCam.FieldOfView = 30
+	-- PC/모바일 공용: 전신 풀샷 (머리 액세서리 + 발 여유)
+	newCam.FieldOfView = 28
 	newCam.CFrame = CFrame.lookAt(
-		Vector3.new(0.2, 0.5, -12),
-		Vector3.new(0, 0.2, 0)
+		Vector3.new(0.2, 0.3, -13),
+		Vector3.new(0, 0.0, 0)
 	)
 	newCam.Parent = self.charViewport
 	self.charViewport.CurrentCamera = newCam
