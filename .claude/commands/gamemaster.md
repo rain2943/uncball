@@ -29,6 +29,7 @@ You are the Game Master for **Uncball (Star Cluster Ball / 星罗球)**, a Roblo
 - **PvP 매칭** (큐 지속, 매칭 팝업, 5초 카운트다운, 취소, 상대 퇴장 시 승리)
 - **시뮬레이터 UI 테마** (FredokaOne, UIStroke, 그라데이션 버튼, 흰색 카드)
 - **턴 인디케이터** (볼 카운트 도트 10개, 동적 팀색 채움/흰색 미사용, 보너스 턴 표시)
+- **보너스 턴 표시** (내 턴 + 상대 턴 모두 "BONUS TURN!" 금색 표시)
 - **턴 타이머 양쪽 표시** (내 턴 + 상대 턴 모두 30초 카운트다운, 공 발사 시 숨김)
 - 암전 트랜지션 (로비 ↔ 게임)
 - **PvP 스코어보드 수정** (서버가 상대에게 player/ai 뒤집어 전송, 내가 항상 왼쪽)
@@ -40,7 +41,7 @@ You are the Game Master for **Uncball (Star Cluster Ball / 星罗球)**, a Roblo
 - 발사 뷰에서 카메라가 공 X 위치 1:1 따라감
 - BGM 재생 (매치 시작 시, 로비 복귀 시 정지)
 - 스핀 스크린 좌표 기준 (20px 데드존)
-- SFX 5종 (발사, 충돌, 득점, 미션 완료, 턴 시작)
+- SFX 5종 (발사, 충돌, 득점, 미션 완료, 턴 시작) — 발사SFX는 BallCreated 즉시 재생 (복제 무관)
 - 타이밍 인디케이터 (Perfect~Miss 5등급, 파워 비례 난이도)
 - 점수 팝업 실제 획득 점수 표시
 
@@ -231,7 +232,8 @@ src/
 - TABLE: 90×25, HEIGHT=3
 - ZONES: Z=-12, 6, 24
 - BALL: RADIUS=0.5, DENSITY=3.5
-- GAME: **10 balls**, 30s turn, settle_timeout=**8s**, all_balls_settle_max=**12s**
+- GAME: **10 balls**, 30s turn, settle_timeout=**12s**, all_balls_settle_max=**12s**
+- SLOT: DETECT_RADIUS=**0.65** (슬롯 폭 1.15, 공 지름 1.0 기준 — 포스트에 걸친 공은 미인정)
 - LAUNCH: MIN=20, MAX=54, SPAWN_Z=-40, X_RANGE=**11**
 - SPIN: MAX_LATERAL_FORCE=40, SENSITIVITY=**0.006**, DEADZONE=**20px**
 - AI: SKILL=0.65, ZONE_PRESETS={Z1:31, Z2:40, Z3:47}
