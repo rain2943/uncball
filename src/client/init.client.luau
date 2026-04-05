@@ -210,11 +210,14 @@ remoteEvents.GameStateUpdate.OnClientEvent:Connect(function(data)
 end)
 
 remoteEvents.BallCreated.OnClientEvent:Connect(function(ball)
+	-- 공 발사됨 → 턴 타이머 즉시 숨기기 (ball 복제 전이라도)
+	ui:hideTurnTimer()
+	-- 상대 가이드 도트 숨기기
+	hideOppGuideDots()
+
 	if ball and ball.Parent then
 		camera:trackBall(ball)
 		attachCollisionSound(ball)
-		-- 공 발사됨 → 턴 타이머 숨기기
-		ui:hideTurnTimer()
 		if ball.Name == "AIBall" then
 			playSound(SFX.LAUNCH, 1.0)
 		end
