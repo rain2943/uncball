@@ -322,6 +322,161 @@ function UIController:_createScoreBoard(gui)
 	self.elements.blueName = blueName
 	addStroke(blueName, Color3.fromRGB(20, 40, 120), 2)
 	self.elements.blueScore = blueScore
+
+	-- ===== 캐릭터 상반신 뷰포트 (스코어보드 양쪽 위) =====
+	local CHAR_VP_W, CHAR_VP_H = 70, 85
+
+	-- 내 캐릭터 (왼쪽)
+	local myCharVP = Instance.new("ViewportFrame")
+	myCharVP.Name = "MyCharViewport"
+	myCharVP.Size = UDim2.new(0, CHAR_VP_W, 0, CHAR_VP_H)
+	myCharVP.Position = UDim2.new(0, 0, 0, -CHAR_VP_H)
+	myCharVP.BackgroundTransparency = 1
+	myCharVP.Ambient = Color3.fromRGB(180, 180, 200)
+	myCharVP.LightColor = Color3.fromRGB(255, 255, 255)
+	myCharVP.LightDirection = Vector3.new(-1, -1, -1)
+	myCharVP.Parent = scoreRow
+	self.elements.myCharViewport = myCharVP
+
+	local myWorldModel = Instance.new("WorldModel")
+	myWorldModel.Parent = myCharVP
+	self.elements.myCharWorldModel = myWorldModel
+
+	-- 상대 캐릭터 (오른쪽)
+	local oppCharVP = Instance.new("ViewportFrame")
+	oppCharVP.Name = "OppCharViewport"
+	oppCharVP.Size = UDim2.new(0, CHAR_VP_W, 0, CHAR_VP_H)
+	oppCharVP.Position = UDim2.new(1, -CHAR_VP_W, 0, -CHAR_VP_H)
+	oppCharVP.BackgroundTransparency = 1
+	oppCharVP.Ambient = Color3.fromRGB(180, 180, 200)
+	oppCharVP.LightColor = Color3.fromRGB(255, 255, 255)
+	oppCharVP.LightDirection = Vector3.new(1, -1, -1)
+	oppCharVP.Parent = scoreRow
+	self.elements.oppCharViewport = oppCharVP
+
+	local oppWorldModel = Instance.new("WorldModel")
+	oppWorldModel.Parent = oppCharVP
+	self.elements.oppCharWorldModel = oppWorldModel
+end
+
+-- ===== 캐릭터 뷰포트 로딩 =====
+
+function UIController:_loadCharIntoViewport(viewport: ViewportFrame, worldModel, userId: number?, facingRight: boolean?)
+	-- 기존 클론 정리
+	for _, child in worldModel:GetChildren() do
+		child:Destroy()
+	end
+	-- 기존 카메라 정리
+	for _, child in viewport:GetChildren() do
+		if child:IsA("Camera") then child:Destroy() end
+	end
+
+	task.spawn(function()
+		local clone = nil
+
+		if userId and userId == Players.LocalPlayer.UserId then
+			-- 내 캐릭터: 직접 클론
+			local char = Players.LocalPlayer.Character
+			if not char then char = Players.LocalPlayer.CharacterAdded:Wait() end
+			if not Players.LocalPlayer:HasAppearanceLoaded() then
+				Players.LocalPlayer.CharacterAppearanceLoaded:Wait()
+			end
+			task.wait(0.3)
+			local wasArchivable = char.Archivable
+			char.Archivable = true
+			clone = char:Clone()
+			char.Archivable = wasArchivable
+		elseif userId then
+			-- 상대 캐릭터: UserId로 모델 생성
+			local ok, model = pcall(function()
+				return Players:CreateHumanoidModelFromUserId(userId)
+			end)
+			if ok and model then
+				clone = model
+			end
+		end
+
+		if not clone then return end
+
+		-- 스크립트 제거
+		for _, v in clone:GetDescendants() do
+			if v:IsA("BaseScript") then v:Destroy() end
+		end
+
+		-- 위치 + 투명도 리셋
+		clone:PivotTo(CFrame.new(0, 0, 0))
+		for _, v in clone:GetDescendants() do
+			if v:IsA("BasePart") then
+				v.Transparency = v.Name == "HumanoidRootPart" and 1 or 0
+			elseif v:IsA("Decal") or v:IsA("Texture") then
+				v.Transparency = 0
+			end
+		end
+
+		clone.Parent = worldModel
+
+		-- 카메라 (상반신 클로즈업)
+		local xDir = facingRight and -1 or 1
+		local cam = Instance.new("Camera")
+		cam.FieldOfView = 30
+		cam.CFrame = CFrame.lookAt(
+			Vector3.new(0.5 * xDir, 1.7, -3),
+			Vector3.new(0, 1.4, 0)
+		)
+		cam.Parent = viewport
+		viewport.CurrentCamera = cam
+
+		-- Idle 애니메이션
+		local humanoid = clone:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			local animator = humanoid:FindFirstChildOfClass("Animator")
+			if not animator then
+				animator = Instance.new("Animator")
+				animator.Parent = humanoid
+			end
+			pcall(function()
+				local idleAnim = Instance.new("Animation")
+				idleAnim.AnimationId = "rbxassetid://507766388"
+				local track = animator:LoadAnimation(idleAnim)
+				track.Looped = true
+				track:Play()
+			end)
+		end
+	end)
+end
+
+function UIController:loadMatchCharacters(opponentId: number?)
+	-- 내 캐릭터 (왼쪽, 오른쪽을 바라봄)
+	self:_loadCharIntoViewport(
+		self.elements.myCharViewport,
+		self.elements.myCharWorldModel,
+		Players.LocalPlayer.UserId,
+		true -- facing right
+	)
+
+	-- 상대 캐릭터 (오른쪽, 왼쪽을 바라봄)
+	if opponentId then
+		self.elements.oppCharViewport.Visible = true
+		self:_loadCharIntoViewport(
+			self.elements.oppCharViewport,
+			self.elements.oppCharWorldModel,
+			opponentId,
+			false -- facing left
+		)
+	else
+		-- AI 대전: 상대 뷰포트 숨김
+		self.elements.oppCharViewport.Visible = false
+	end
+end
+
+function UIController:clearMatchCharacters()
+	for _, wm in { self.elements.myCharWorldModel, self.elements.oppCharWorldModel } do
+		if wm then
+			for _, child in wm:GetChildren() do
+				child:Destroy()
+			end
+		end
+	end
 end
 
 -- ===== 파워 게이지 (우측) =====
@@ -1031,6 +1186,9 @@ function UIController:setupScoreboard(myTeam: string, opponentName: string)
 	-- myTeam == "red"이면 기본 색상 그대로 (왼쪽=빨강, 오른쪽=파랑)
 
 	self._scoreFlipped = false -- 항상 왼쪽=player, 오른쪽=ai (서버가 뒤집어서 보내줌)
+
+	-- 캐릭터 상반신 모델 로딩
+	self:loadMatchCharacters(self._opponentId)
 end
 
 -- 상대 이름 변경 (퇴장 시)
@@ -1463,6 +1621,7 @@ end
 
 function UIController:hideResult()
 	self.elements.resultFrame.Visible = false
+	self:clearMatchCharacters()
 end
 
 -- ===== 온보딩 가이드 (매 턴, 공 아래 화살표 + Pull down) =====
