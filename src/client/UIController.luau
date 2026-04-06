@@ -187,7 +187,7 @@ function UIController:_createTopBar(gui)
 	turnTimer.Position = UDim2.new(0.5, -35, 0, 98)
 	turnTimer.BackgroundColor3 = Color3.fromRGB(40, 42, 55)
 	turnTimer.BackgroundTransparency = 0.08
-	turnTimer.Text = "30"
+	turnTimer.Text = tostring(Config.GAME.TURN_TIME)
 	turnTimer.TextColor3 = Color3.fromRGB(255, 255, 255)
 	turnTimer.TextScaled = true
 	turnTimer.Font = FONT_BOLD
@@ -954,23 +954,37 @@ function UIController:_createEmojiPanel(gui)
 		addCorner(btn, 10)
 
 		btn.MouseButton1Click:Connect(function()
+			-- 한 턴에 2번까지만 사용 가능
+			if self._emojiCountThisTurn >= self._emojiMaxPerTurn then return end
 			-- 서버에 이모지 전송
 			local remotes = ReplicatedStorage:FindFirstChild("Remotes")
 			if remotes then
 				local sendEmoji = remotes:FindFirstChild("SendEmoji")
 				if sendEmoji then
 					sendEmoji:FireServer(i)
+					self._emojiCountThisTurn += 1
 				end
 			end
 			-- 패널 닫기
 			emojiPanel.Visible = false
 			self._emojiOpen = false
+			-- 제한 도달 시 버튼들 비활성화
+			if self._emojiCountThisTurn >= self._emojiMaxPerTurn then
+				for _, child in emojiPanel:GetChildren() do
+					if child:IsA("TextButton") then
+						child.BackgroundColor3 = Color3.fromRGB(180, 180, 180)
+						child.TextTransparency = 0.5
+					end
+				end
+			end
 		end)
 	end
 
 	self.elements.emojiToggle = emojiBtn
 	self.elements.emojiPanel = emojiPanel
 	self._emojiOpen = false
+	self._emojiCountThisTurn = 0
+	self._emojiMaxPerTurn = 2
 
 	-- 토글 클릭
 	emojiBtn.MouseButton1Click:Connect(function()
@@ -995,7 +1009,13 @@ function UIController:showEmojiReaction(side: string, emojiId: number)
 		xPos = vp and (vp.Position.X.Offset + vp.Size.X.Offset + 5) or 80
 	else
 		local vp = self.elements.oppCharViewport
-		xPos = vp and (vp.Position.X.Offset - 40) or (scoreRow.AbsoluteSize.X - 120)
+		if vp then
+			-- oppCharVP는 Scale=1 기반이므로 AbsoluteSize로 실제 위치 계산
+			local vpLeft = scoreRow.AbsoluteSize.X + vp.Position.X.Offset
+			xPos = vpLeft + vp.Size.X.Offset / 2 - 20
+		else
+			xPos = scoreRow.AbsoluteSize.X - 120
+		end
 	end
 
 	local label = Instance.new("TextLabel")
@@ -1496,6 +1516,18 @@ function UIController:updateSpinIndicator(spin: number, power: number?)
 end
 
 function UIController:setTurn(isPlayerTurn: boolean, isBonus: boolean?)
+	-- 이모지 사용 횟수 리셋
+	self._emojiCountThisTurn = 0
+	local ep = self.elements.emojiPanel
+	if ep then
+		for _, child in ep:GetChildren() do
+			if child:IsA("TextButton") then
+				child.BackgroundColor3 = Color3.fromRGB(245, 245, 250)
+				child.TextTransparency = 0
+			end
+		end
+	end
+
 	local panel = self.elements.turnPanel
 	local turnText = self.elements.turnText
 	local turnTimer = self.elements.turnTimer
