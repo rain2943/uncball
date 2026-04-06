@@ -32,7 +32,7 @@ function AIPlayer:decide(slotOwners: { [number]: { string? } }): (Vector3, numbe
 	local direction = Vector3.new(0, 0, 1).Unit
 
 	-- 스핀: 안쪽으로 커브 (오른쪽발사→R스핀=-, 왼쪽발사→L스핀=+)
-	local spin = -side * (0.05 + math.random() * 0.03)
+	local spin = -side * (0.10 + math.random() * 0.06)
 
 	-- 파워: 물리 역산 프리셋
 	local preset = ZONE_PRESETS[targetZone]

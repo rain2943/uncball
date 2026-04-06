@@ -92,6 +92,33 @@ local function fadeFromBlack(duration: number?)
 	tween.Completed:Wait()
 end
 
+-- BGM 목록
+local BGM_LIST = {
+	"rbxassetid://135010856476032",
+	"rbxassetid://85272223742549",
+	"rbxassetid://108671257023205",
+	"rbxassetid://138690886215230",
+	"rbxassetid://114347048378804",
+	"rbxassetid://126841253996417",
+}
+
+local function playBGM()
+	local old = workspace:FindFirstChild("BGM")
+	if old then old:Destroy() end
+	local bgm = Instance.new("Sound")
+	bgm.Name = "BGM"
+	bgm.SoundId = BGM_LIST[math.random(1, #BGM_LIST)]
+	bgm.Volume = 0.4
+	bgm.Looped = true
+	bgm.Parent = workspace
+	bgm:Play()
+end
+
+local function stopBGM()
+	local bgm = workspace:FindFirstChild("BGM")
+	if bgm then bgm:Destroy() end
+end
+
 -- 매치 상태 추적
 local inMatch = false
 local currentTableOffset = Vector3.zero
@@ -100,6 +127,7 @@ local currentTableOffset = Vector3.zero
 ui:hide()
 lobby:show()
 camera:enterLobbyView()
+playBGM() -- 로비 BGM
 
 -- === SFX ===
 local SFX = {
@@ -184,7 +212,7 @@ local function updateOppGuide(spawnX: number, power: number, spin: number)
 	local currentPower = Config.LAUNCH.MIN_POWER + (Config.LAUNCH.MAX_POWER - Config.LAUNCH.MIN_POWER) * power
 
 	local mass = 2
-	local lateralAccel = spin * Config.SPIN.MAX_LATERAL_FORCE / mass * 2.5
+	local lateralAccel = spin * Config.SPIN.MAX_LATERAL_FORCE / mass * 5.5
 	local maxDist = power * 20
 
 	for i, dot in oppGuideDots do
@@ -242,16 +270,8 @@ remoteEvents.MatchStart.OnClientEvent:Connect(function(data)
 		ui:initMissions(data.missions)
 	end
 
-	-- BGM 재생
-	if not workspace:FindFirstChild("BGM") then
-		local bgm = Instance.new("Sound")
-		bgm.Name = "BGM"
-		bgm.SoundId = "rbxassetid://126841253996417"
-		bgm.Volume = 0.4
-		bgm.Looped = true
-		bgm.Parent = workspace
-		bgm:Play()
-	end
+	-- BGM 변경 (매치용 랜덤 곡)
+	playBGM()
 
 	-- 암전 트랜지션 (UI 전환은 이미 완료, 암전 중 로비만 숨김)
 	task.spawn(function()
@@ -322,6 +342,12 @@ remoteEvents.BallLanded.OnClientEvent:Connect(function(data)
 	end
 end)
 
+-- 이모지 리액션 수신
+remoteEvents.SendEmoji.OnClientEvent:Connect(function(side, emojiId)
+	if not inMatch then return end
+	ui:showEmojiReaction(side, emojiId)
+end)
+
 remoteEvents.MatchEnd.OnClientEvent:Connect(function(data)
 	inMatch = false
 	launch:setEnabled(false)
@@ -358,9 +384,8 @@ remoteEvents.MatchEnd.OnClientEvent:Connect(function(data)
 		launch:setTableOffset(Vector3.zero)
 		camera:enterLobbyView()
 
-		-- BGM 정지
-		local bgm = workspace:FindFirstChild("BGM")
-		if bgm then bgm:Destroy() end
+		-- BGM 변경 (로비용 랜덤 곡)
+		playBGM()
 
 		task.wait(0.2)
 		fadeFromBlack(0.6)

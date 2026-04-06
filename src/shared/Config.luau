@@ -70,7 +70,7 @@ Config.GAME = {
 	TURN_TIME = 30,
 	BALL_SETTLE_VELOCITY = 0.3,
 	BALL_SETTLE_TIMEOUT = 12,
-	BALL_OUT_Y = -5,
+	BALL_OUT_Y = 1,
 	CONSECUTIVE_BONUS = { [2] = 1, [3] = 3, [4] = 6, [5] = 10, [6] = 15, [7] = 21 },
 }
 
@@ -88,7 +88,7 @@ Config.LAUNCH = {
 
 -- 스핀
 Config.SPIN = {
-	MAX_LATERAL_FORCE = 40,
+	MAX_LATERAL_FORCE = 20,
 	CHANGE_SPEED = 2.5,
 }
 
@@ -102,6 +102,16 @@ Config.AI = {
 	THINK_TIME_MAX = 2.8,
 	AIM_ERROR_MAX = 3.0,
 	POWER_ERROR_MAX = 10,
+	NAMES = {
+		"xBlazeKing", "SkyDrift", "NoobMaster99", "ItzVortex",
+		"DarkWolf_X", "CoolBreezy", "ProGamer2k", "ShadowFury",
+		"PixelDude", "EpicNinja77", "LunarFox", "TurboMax",
+		"StarBlitz", "IceStorm", "MightyDuck", "RocketBoy",
+		"ZappyZ", "CrystalGem", "BoltStrike", "GhostRider",
+		"NeonSpark", "SwiftEdge", "FlameHawk", "OceanWave",
+		"ThunderX", "CosmicRay", "FrostyBear", "JetPilot",
+		"ViperKing", "SilverFang",
+	},
 }
 
 -- 카메라
@@ -128,28 +138,28 @@ Config.MISSIONS = {
 	MEDIUM_BONUS = 6,
 	HARD_BONUS = 10,
 	EASY_POOL = {
-		{ "A", "B" },
-		{ "B", "C" },
-		{ "A", "C" },
-		{ "C", "D" },
-		{ "B", "D" },
-		{ "A", "D" },
-	},
-	MEDIUM_POOL = {
 		{ "A", "B", "C" },
-		{ "B", "B", "A" },
+		{ "B", "C", "D" },
 		{ "A", "C", "D" },
-		{ "B", "C", "C" },
+		{ "A", "B", "D" },
 		{ "B", "B", "C" },
 		{ "A", "B", "B" },
 	},
-	HARD_POOL = {
+	MEDIUM_POOL = {
 		{ "A", "B", "C", "D" },
-		{ "B", "B", "C", "A" },
-		{ "A", "B", "B", "C" },
-		{ "B", "C", "C", "A" },
 		{ "A", "A", "B", "C" },
-		{ "B", "B", "A", "D" },
+		{ "B", "B", "C", "D" },
+		{ "A", "B", "B", "C" },
+		{ "B", "C", "C", "D" },
+		{ "A", "B", "C", "C" },
+	},
+	HARD_POOL = {
+		{ "A", "A", "B", "C", "D" },
+		{ "A", "B", "B", "C", "D" },
+		{ "B", "B", "C", "C", "A" },
+		{ "A", "A", "B", "B", "C" },
+		{ "A", "B", "C", "C", "D" },
+		{ "B", "B", "B", "C", "A" },
 	},
 }
 
@@ -176,6 +186,7 @@ Config.REMOTES = {
 	"MatchCancelled",
 	"PreviewUpdate",
 	"TimingGrade",
+	"SendEmoji",
 }
 
 return Config

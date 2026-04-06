@@ -45,6 +45,7 @@ function GameManager.new()
 	-- 미션 카드 시스템
 	self.missions = {} -- { {letters={...}, bonus=N, claimedBy=nil|"player"|"ai", difficulty=1|2|3}, ... }
 	self.missionLetters = { player = {}, ai = {} } -- 각 팀이 모은 레터 카운트
+	self._isBonusTurn = false -- 보너스 턴 시 공 소모 안 함
 
 	return self
 end
@@ -111,7 +112,8 @@ function GameManager:startMatch(player, opponent)
 	local matchData = {
 		ballsPerPlayer = Config.GAME.BALLS_PER_PLAYER,
 		missions = self.missions,
-		opponentName = self.opponent and self.opponent.DisplayName or "AI",
+		opponentName = self.opponent and self.opponent.DisplayName
+			or Config.AI.NAMES[math.random(1, #Config.AI.NAMES)],
 		opponentId = self.opponent and self.opponent.UserId or nil,
 		teamColor = "red",
 		tableOffset = offsetArr,
@@ -140,6 +142,7 @@ end
 
 function GameManager:_startPlayerTurn(isBonus: boolean?)
 	if self.turnTimer then task.cancel(self.turnTimer); self.turnTimer = nil end
+	self._isBonusTurn = isBonus or false
 	self.state = "PLAYER_TURN"
 	self:_fireClient("TurnChanged", self.player, true, self.remainingBalls.player, isBonus or false)
 	if self.opponent then
@@ -153,8 +156,10 @@ function GameManager:_startPlayerTurn(isBonus: boolean?)
 		if self._destroyed then return end
 		if self.state ~= "PLAYER_TURN" then return end
 
-		print("[Uncball] Player turn timeout! Remaining:", self.remainingBalls.player - 1)
-		self.remainingBalls.player -= 1
+		if not self._isBonusTurn then
+			self.remainingBalls.player -= 1
+		end
+		print("[Uncball] Player turn timeout! Remaining:", self.remainingBalls.player)
 		self:_broadcastState()
 
 		pcall(function()
@@ -168,7 +173,7 @@ function GameManager:_startPlayerTurn(isBonus: boolean?)
 					zone = nil, slot = nil, team = "ai",
 					points = 0, position = nil,
 					scores = { player = self.scores.ai, ai = self.scores.player },
-					missions = self.missions, newMissions = {},
+					missions = self:_flipMissions(), newMissions = {},
 				})
 			end
 		end)
@@ -189,8 +194,10 @@ function GameManager:handleLaunch(player, direction: Vector3, power: number, spi
 		return
 	end
 
-	local remaining = team == "player" and self.remainingBalls.player or self.remainingBalls.ai
-	if remaining <= 0 then return end
+	if not self._isBonusTurn then
+		local remaining = team == "player" and self.remainingBalls.player or self.remainingBalls.ai
+		if remaining <= 0 then return end
+	end
 
 	-- 턴 타이머 취소
 	if self.turnTimer then
@@ -202,10 +209,12 @@ function GameManager:handleLaunch(player, direction: Vector3, power: number, spi
 	spin = math.clamp(spin or 0, -1, 1)
 	spawnX = math.clamp(spawnX or 0, -Config.LAUNCH.SPAWN_X_RANGE, Config.LAUNCH.SPAWN_X_RANGE)
 
-	if team == "player" then
-		self.remainingBalls.player -= 1
-	else
-		self.remainingBalls.ai -= 1
+	if not self._isBonusTurn then
+		if team == "player" then
+			self.remainingBalls.player -= 1
+		else
+			self.remainingBalls.ai -= 1
+		end
 	end
 	self.state = "BALL_MOVING"
 
@@ -219,6 +228,7 @@ end
 
 function GameManager:_executeAITurn(isBonus: boolean?)
 	if self.turnTimer then task.cancel(self.turnTimer); self.turnTimer = nil end
+	self._isBonusTurn = isBonus or false
 	if self.remainingBalls.ai <= 0 then
 		self:_nextTurn()
 		return
@@ -237,8 +247,10 @@ function GameManager:_executeAITurn(isBonus: boolean?)
 			if self._destroyed then return end
 			if self.state ~= "OPPONENT_TURN" then return end
 
-			print("[Uncball] Opponent turn timeout! Remaining:", self.remainingBalls.ai - 1)
-			self.remainingBalls.ai -= 1
+			if not self._isBonusTurn then
+				self.remainingBalls.ai -= 1
+			end
+			print("[Uncball] Opponent turn timeout! Remaining:", self.remainingBalls.ai)
 			self:_broadcastState()
 
 			pcall(function()
@@ -251,7 +263,7 @@ function GameManager:_executeAITurn(isBonus: boolean?)
 					zone = nil, slot = nil, team = "player",
 					points = 0, position = nil,
 					scores = { player = self.scores.ai, ai = self.scores.player },
-					missions = self.missions, newMissions = {},
+					missions = self:_flipMissions(), newMissions = {},
 				})
 			end)
 
@@ -271,7 +283,9 @@ function GameManager:_executeAITurn(isBonus: boolean?)
 		self:_fireClient("TurnChanged", self.player, false, self.remainingBalls.ai)
 		task.wait(1.0)
 
-		self.remainingBalls.ai -= 1
+		if not self._isBonusTurn then
+			self.remainingBalls.ai -= 1
+		end
 		local ball = self:_createBall("ai", aiSpawnX)
 		self:_launchBall(ball, direction, power, spin)
 
@@ -458,11 +472,20 @@ function GameManager:_waitForSettle(ball: Part, team: string)
 			return
 		end
 
-		-- 테이블 아래로 떨어진 경우만 삭제
-		if ball.Position.Y < Config.GAME.BALL_OUT_Y then
+		-- 테이블 아래로 떨어지거나 발사 위치까지 되돌아오면 아웃 처리
+		if ball.Position.Y < Config.GAME.BALL_OUT_Y
+			or ball.Position.Z < Config.LAUNCH.SPAWN_Z + self.tableOffset.Z then
 			ball:Destroy()
 			self:_checkLooseBalls()
 			self:_onBallResult(nil, nil, team, nil)
+			return
+		end
+
+		-- 속도와 무관하게 슬롯 안착 체크 (느리게 굴러들어가는 경우 대응)
+		local zoneNum, slotIdx = self:_checkSlotLanding(ball)
+		if zoneNum and self:_snapBallToSlot(ball, zoneNum, slotIdx, team) ~= false then
+			self:_checkLooseBalls()
+			self:_onBallResult(zoneNum, slotIdx, team, ball)
 			return
 		end
 
@@ -484,10 +507,10 @@ function GameManager:_waitForSettle(ball: Part, team: string)
 			end
 
 			-- 슬롯 안착 체크
-			local zoneNum, slotIdx = self:_checkSlotLanding(ball)
-			if zoneNum and self:_snapBallToSlot(ball, zoneNum, slotIdx, team) ~= false then
-				self:_checkLooseBalls() -- 충돌로 밀려난 다른 공도 체크
-				self:_onBallResult(zoneNum, slotIdx, team, ball)
+			local zn, si = self:_checkSlotLanding(ball)
+			if zn and self:_snapBallToSlot(ball, zn, si, team) ~= false then
+				self:_checkLooseBalls()
+				self:_onBallResult(zn, si, team, ball)
 			else
 				-- 슬롯에 안 들어갔지만 삭제하지 않음! 테이블에 남겨둠
 				table.insert(self.looseBalls, { ball = ball, team = team })
@@ -558,7 +581,7 @@ function GameManager:_checkLooseBalls()
 						team = team == "player" and "ai" or "player",
 						points = pts, position = ball.Position,
 						scores = { player = self.scores.ai, ai = self.scores.player },
-						missions = self.missions, newMissions = newMissions,
+						missions = self:_flipMissions(), newMissions = newMissions,
 						playerLetters = self:_collectLetters("ai"),
 					})
 				end
@@ -656,7 +679,7 @@ function GameManager:_onBallResult(zoneNum, slotIdx, team, ball)
 			points = math.max(pointsGained, 0),
 			position = ball and ball.Position or nil,
 			scores = { player = self.scores.ai, ai = self.scores.player }, -- 점수도 뒤집기
-			missions = self.missions,
+			missions = self:_flipMissions(),
 			newMissions = newMissions,
 			playerLetters = self:_collectLetters("ai"),
 		}
@@ -670,17 +693,14 @@ function GameManager:_onBallResult(zoneNum, slotIdx, team, ball)
 	-- 턴 넘기기 전 모든 공이 멈출 때까지 대기
 	self:_waitAllBallsSettled()
 
-	-- 슬롯 안착 성공 → 보너스 턴!
+	-- 슬롯 안착 성공 → 보너스 턴! (공 소모 없음)
 	if zoneNum and team == self.currentTurn then
-		local remaining = team == "player" and self.remainingBalls.player or self.remainingBalls.ai
-		if remaining > 0 then
-			if team == "player" then
-				self:_startPlayerTurn(true) -- 보너스 턴
-			else
-				self:_executeAITurn(true) -- AI 보너스 턴
-			end
-			return
+		if team == "player" then
+			self:_startPlayerTurn(true)
+		else
+			self:_executeAITurn(true)
 		end
+		return
 	end
 	self:_nextTurn()
 end
@@ -760,6 +780,24 @@ function GameManager:_generateMissions()
 	})
 
 	print("[Uncball] Missions generated:", #self.missions)
+end
+
+-- 상대 시점으로 미션 claimedBy 뒤집기 (player↔ai)
+function GameManager:_flipMissions(): { any }
+	local flipped = {}
+	for _, mission in self.missions do
+		local m = {}
+		for k, v in mission do
+			m[k] = v
+		end
+		if m.claimedBy == "player" then
+			m.claimedBy = "ai"
+		elseif m.claimedBy == "ai" then
+			m.claimedBy = "player"
+		end
+		table.insert(flipped, m)
+	end
+	return flipped
 end
 
 -- 팀의 보유 레터 수집
@@ -1029,7 +1067,7 @@ function GameManager:_broadcastState()
 			remainingBalls = { player = self.remainingBalls.ai, ai = self.remainingBalls.player },
 			currentTurn = self.currentTurn,
 			state = self.state,
-			missions = self.missions,
+			missions = self:_flipMissions(),
 			playerLetters = self:_collectLetters("ai"),
 		}
 		self:_fireClient("GameStateUpdate", self.opponent, oppData)

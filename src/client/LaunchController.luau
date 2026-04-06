@@ -186,7 +186,7 @@ function LaunchController:_updateGuide()
 
 	-- 실제 물리 파라미터
 	local mass = 2
-	local lateralAccel = self.spin * Config.SPIN.MAX_LATERAL_FORCE / mass * 2.5 -- 가이드 커브 과장 (실제 물리보다 크게 보여줌)
+	local lateralAccel = self.spin * Config.SPIN.MAX_LATERAL_FORCE / mass * 5.5 -- 가이드 커브 과장 (실제 물리보다 크게 보여줌)
 	local inclineDecel = Config.INCLINE_FORCE -- -Z 방향 감속
 
 	-- 가이드 길이: 파워에 비례하되 짧게 (정밀 조정 가능하게)
@@ -381,11 +381,14 @@ function LaunchController:_setupInput()
 			local screenDx = input.Position.X - self.aimStartPos.X
 			local deadzone = 20
 			if math.abs(screenDx) < deadzone then
-				screenDx = 0
+				-- 데드존 내에서는 기존 스핀 유지 (손 떼기 직전 0으로 리셋 방지)
+				screenDx = nil
 			else
 				screenDx = screenDx - (screenDx > 0 and deadzone or -deadzone)
 			end
-			self.spin = math.clamp(-screenDx * SPIN_SENSITIVITY, -1, 1)
+			if screenDx then
+				self.spin = math.clamp(-screenDx * SPIN_SENSITIVITY, -1, 1)
+			end
 		else
 			-- 당기지 않은 상태 → 위치 조정 모드
 			self.state = "POSITION"

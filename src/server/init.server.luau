@@ -257,6 +257,26 @@ remoteEvents.PreviewUpdate.OnServerEvent:Connect(function(player, spawnX, power,
 	end
 end)
 
+-- 이모지 릴레이 (PvP: 상대에게 이모지 전달)
+remoteEvents.SendEmoji.OnServerEvent:Connect(function(player, emojiId)
+	if typeof(emojiId) ~= "number" then return end
+	if emojiId < 1 or emojiId > 4 then return end
+	local gm = playerGMs[player]
+	if not gm then return end
+	-- 나에게도 표시 (자기 아바타 옆)
+	remoteEvents.SendEmoji:FireClient(player, "player", emojiId)
+	-- 상대에게 전달
+	local target = nil
+	if gm.player == player and gm.opponent then
+		target = gm.opponent
+	elseif gm.opponent == player then
+		target = gm.player
+	end
+	if target and target.Parent then
+		remoteEvents.SendEmoji:FireClient(target, "ai", emojiId)
+	end
+end)
+
 -- 발사 요청 → 해당 플레이어의 GM에 전달
 remoteEvents.RequestLaunch.OnServerEvent:Connect(function(player, direction, power, spin, spawnX)
 	local gm = playerGMs[player]

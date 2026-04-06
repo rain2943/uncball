@@ -150,7 +150,9 @@ function CameraController:_updateTracking(dt: number)
 		end
 	end
 
-	local camPos = Vector3.new(ballPos.X * 0.4, ballPos.Y + 12, ballPos.Z - 8)
+	-- tableOffset 기준 상대 X 위치로 카메라 계산 (멀티 테이블 지원)
+	local relX = ballPos.X - self.tableOffset.X
+	local camPos = Vector3.new(self.tableOffset.X + relX * 0.4, ballPos.Y + 12, ballPos.Z - 8)
 	local targetCF = CFrame.lookAt(camPos, ballPos)
 	self.camera.CFrame = self.camera.CFrame:Lerp(targetCF, math.min(dt * 8, 1))
 end

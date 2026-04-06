@@ -55,6 +55,7 @@ function UIController:_createUI()
 	self:_createTurnIndicator(gui)
 	self:_createResultScreen(gui)
 	self:_createMissionPanel(gui)
+	self:_createEmojiPanel(gui)
 end
 
 -- ===== 상단: 턴 인디케이터 + 볼 카운트 + 턴 타이머 =====
@@ -691,19 +692,23 @@ end
 
 -- ===== 미션 카드 패널 (좌측) =====
 function UIController:_createMissionPanel(gui)
+	local vpCam = workspace.CurrentCamera
+	local isMobilePanel = vpCam and vpCam.ViewportSize.Y > vpCam.ViewportSize.X
 	local PAD = 8
 	local CARD_H = 42
 	local GAP = 5
+	local PANEL_W = isMobilePanel and 240 or 270
 	local panelH = PAD + 3 * CARD_H + 2 * GAP + PAD
 
 	local panel = Instance.new("Frame")
 	panel.Name = "MissionPanel"
-	panel.Size = UDim2.new(0, 210, 0, panelH)
+	panel.Size = UDim2.new(0, PANEL_W, 0, panelH)
 	panel.Position = UDim2.new(0, 6, 0.22, 0)
 	panel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	panel.BackgroundTransparency = 0.08
 	panel.BorderSizePixel = 0
 	panel.ClipsDescendants = true
+	panel.ZIndex = 8
 	panel.Parent = gui
 	addCorner(panel, 16)
 	addStroke(panel, Color3.fromRGB(200, 205, 220), 2)
@@ -791,7 +796,7 @@ function UIController:_createMissionPanel(gui)
 	toggleBtn.Font = FONT_BOLD
 	toggleBtn.TextScaled = true
 	toggleBtn.BorderSizePixel = 0
-	toggleBtn.ZIndex = 5
+	toggleBtn.ZIndex = 8
 	toggleBtn.Visible = false
 	toggleBtn.Parent = gui
 	addCorner(toggleBtn, 14)
@@ -814,7 +819,7 @@ function UIController:_createMissionPanel(gui)
 	badge.Position = UDim2.new(1, -6, 0, -6)
 	badge.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
 	badge.BorderSizePixel = 0
-	badge.ZIndex = 6
+	badge.ZIndex = 9
 	badge.Visible = false
 	badge.Parent = toggleBtn
 	addCorner(badge, 9)
@@ -826,7 +831,7 @@ function UIController:_createMissionPanel(gui)
 	badgeText.TextColor3 = Color3.fromRGB(255, 255, 255)
 	badgeText.Font = FONT_BOLD
 	badgeText.TextScaled = true
-	badgeText.ZIndex = 7
+	badgeText.ZIndex = 10
 	badgeText.Parent = badge
 
 	self.elements.missionToggle = toggleBtn
@@ -890,6 +895,141 @@ function UIController:_updateMissionLayout()
 	end
 end
 
+-- ===== 이모지 리액션 시스템 =====
+function UIController:_createEmojiPanel(gui)
+	local EMOJI_LIST = { "\u{1F44D}", "\u{1F622}", "\u{1F604}", "\u{1F44F}" } -- 따봉, 슬픔, 즐거움, 박수
+	local BTN_SIZE = 42
+	local PANEL_GAP = 6
+
+	-- 이모지 토글 버튼 (M 버튼 위)
+	local emojiBtn = Instance.new("TextButton")
+	emojiBtn.Name = "EmojiToggle"
+	emojiBtn.Size = UDim2.new(0, 46, 0, 46)
+	emojiBtn.Position = UDim2.new(0, 10, 1, -280)
+	emojiBtn.BackgroundColor3 = Color3.fromRGB(255, 225, 130)
+	emojiBtn.BackgroundTransparency = 0
+	emojiBtn.Text = "\u{1F60A}"
+	emojiBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	emojiBtn.TextSize = 24
+	emojiBtn.BorderSizePixel = 0
+	emojiBtn.ZIndex = 5
+	emojiBtn.Parent = gui
+	addCorner(emojiBtn, 14)
+	addStroke(emojiBtn, Color3.fromRGB(220, 180, 50), 3)
+
+	local emojiGrad = Instance.new("UIGradient")
+	emojiGrad.Color = ColorSequence.new(Color3.fromRGB(255, 230, 140), Color3.fromRGB(255, 210, 90))
+	emojiGrad.Rotation = 90
+	emojiGrad.Parent = emojiBtn
+
+	-- 이모지 선택 패널 (세로, 버튼 위로 펼침)
+	local emojiPanel = Instance.new("Frame")
+	emojiPanel.Name = "EmojiPanel"
+	local panelH = #EMOJI_LIST * (BTN_SIZE + PANEL_GAP) + PANEL_GAP
+	emojiPanel.Size = UDim2.new(0, 50, 0, panelH)
+	emojiPanel.Position = UDim2.new(0, 8, 1, -280 - panelH - 6)
+	emojiPanel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	emojiPanel.BackgroundTransparency = 0.05
+	emojiPanel.BorderSizePixel = 0
+	emojiPanel.ClipsDescendants = true
+	emojiPanel.Visible = false
+	emojiPanel.ZIndex = 6
+	emojiPanel.Parent = gui
+	addCorner(emojiPanel, 12)
+	addStroke(emojiPanel, Color3.fromRGB(220, 220, 230), 2)
+
+	-- 이모지 버튼 4개
+	for i, emoji in EMOJI_LIST do
+		local btn = Instance.new("TextButton")
+		btn.Name = "Emoji_" .. i
+		btn.Size = UDim2.new(0, BTN_SIZE, 0, BTN_SIZE)
+		btn.Position = UDim2.new(0.5, -BTN_SIZE / 2, 0, PANEL_GAP + (i - 1) * (BTN_SIZE + PANEL_GAP))
+		btn.BackgroundColor3 = Color3.fromRGB(245, 245, 250)
+		btn.BackgroundTransparency = 0
+		btn.Text = emoji
+		btn.TextSize = 22
+		btn.BorderSizePixel = 0
+		btn.ZIndex = 7
+		btn.Parent = emojiPanel
+		addCorner(btn, 10)
+
+		btn.MouseButton1Click:Connect(function()
+			-- 서버에 이모지 전송
+			local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+			if remotes then
+				local sendEmoji = remotes:FindFirstChild("SendEmoji")
+				if sendEmoji then
+					sendEmoji:FireServer(i)
+				end
+			end
+			-- 패널 닫기
+			emojiPanel.Visible = false
+			self._emojiOpen = false
+		end)
+	end
+
+	self.elements.emojiToggle = emojiBtn
+	self.elements.emojiPanel = emojiPanel
+	self._emojiOpen = false
+
+	-- 토글 클릭
+	emojiBtn.MouseButton1Click:Connect(function()
+		self._emojiOpen = not self._emojiOpen
+		emojiPanel.Visible = self._emojiOpen
+	end)
+end
+
+-- 이모지 애니메이션 (캐릭터 뷰포트 옆에서 위로 떠오르며 사라짐)
+function UIController:showEmojiReaction(side: string, emojiId: number)
+	local EMOJI_LIST = { "\u{1F44D}", "\u{1F622}", "\u{1F604}", "\u{1F44F}" }
+	local emoji = EMOJI_LIST[emojiId]
+	if not emoji then return end
+
+	local scoreRow = self.gui:FindFirstChild("ScoreRow")
+	if not scoreRow then return end
+
+	-- side="player"이면 왼쪽(내 아바타), "ai"이면 오른쪽(상대 아바타)
+	local xPos
+	if side == "player" then
+		local vp = self.elements.myCharViewport
+		xPos = vp and (vp.Position.X.Offset + vp.Size.X.Offset + 5) or 80
+	else
+		local vp = self.elements.oppCharViewport
+		xPos = vp and (vp.Position.X.Offset - 40) or (scoreRow.AbsoluteSize.X - 120)
+	end
+
+	local label = Instance.new("TextLabel")
+	label.Name = "EmojiReaction"
+	label.Size = UDim2.new(0, 40, 0, 40)
+	label.Position = UDim2.new(0, xPos, 0, -60)
+	label.BackgroundTransparency = 1
+	label.Text = emoji
+	label.TextSize = 32
+	label.ZIndex = 10
+	label.Parent = scoreRow
+
+	-- 이모지 SFX
+	local sfx = Instance.new("Sound")
+	sfx.SoundId = "rbxassetid://137273815815490"
+	sfx.Volume = 0.6
+	sfx.Parent = workspace
+	sfx:Play()
+	sfx.Ended:Once(function() sfx:Destroy() end)
+
+	-- 위로 떠오르며 페이드 아웃
+	local tweenInfo = TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	TweenService:Create(label, tweenInfo, {
+		Position = UDim2.new(0, xPos, 0, -160),
+		TextTransparency = 1,
+	}):Play()
+
+	task.delay(1.5, function()
+		if label and label.Parent then
+			label:Destroy()
+		end
+	end)
+end
+
 -- 미션 초기화 (매치 시작 시 서버에서 받은 미션 데이터로)
 function UIController:initMissions(missions)
 	if not missions then return end
@@ -912,7 +1052,7 @@ function UIController:initMissions(missions)
 		for i, letter in mission.letters do
 			local bubble = Instance.new("Frame")
 			bubble.Name = "Letter_" .. i
-			bubble.Size = UDim2.new(0, 28, 0, 28)
+			bubble.Size = UDim2.new(0, 26, 0, 26)
 			bubble.BackgroundColor3 = Color3.fromRGB(220, 225, 235)
 			bubble.BorderSizePixel = 0
 			addCorner(bubble, 8)
@@ -1257,7 +1397,7 @@ function UIController:updateSpinIndicator(spin: number, power: number?)
 		local frame = Instance.new("Frame")
 		frame.Name = "SpinFrame"
 		frame.Size = UDim2.new(0, 90, 0, 110)
-		frame.Position = UDim2.new(0, 10, 0.45, 0)
+		frame.Position = UDim2.new(0, 10, 0.40, 0)
 		frame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 		frame.BackgroundTransparency = 0.08
 		frame.BorderSizePixel = 0
@@ -1301,7 +1441,7 @@ function UIController:updateSpinIndicator(spin: number, power: number?)
 		speedText.TextColor3 = Color3.fromRGB(100, 100, 120)
 		speedText.TextScaled = true
 		speedText.Font = FONT_MEDIUM
-		speedText.Text = "0.0 m/s"
+		speedText.Text = "0.0 m"
 		speedText.Parent = frame
 
 		-- 스핀 값 텍스트
@@ -1339,8 +1479,8 @@ function UIController:updateSpinIndicator(spin: number, power: number?)
 
 	-- 속도 텍스트
 	local currentPower = Config.LAUNCH.MIN_POWER + (Config.LAUNCH.MAX_POWER - Config.LAUNCH.MIN_POWER) * power
-	local speedMs = currentPower * 0.15 -- 대략적인 m/s 변환
-	self.elements.speedText.Text = string.format("%.1f m/s", speedMs)
+	local speedMs = currentPower * 0.15 -- 대략적인 m 변환
+	self.elements.speedText.Text = string.format("%.1f m", speedMs)
 
 	-- 스핀 텍스트 + 색상
 	if math.abs(spin) < 0.05 then
