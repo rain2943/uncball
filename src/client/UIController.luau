@@ -499,6 +499,113 @@ function UIController:_loadCharIntoViewport(viewport: ViewportFrame, worldModel,
 	end)
 end
 
+-- 뷰포트 캐릭터에 세레브 애니메이션 재생 (득점 시)
+-- Roblox 기본 애니메이션만 사용 가능 (소유권 문제)
+local CELEBRATE_ANIMS = {
+	"rbxassetid://507770239",  -- Wave
+	"rbxassetid://507771019",  -- Laugh
+	"rbxassetid://507770677",  -- Cheer
+}
+local SAD_ANIMS = {
+	"rbxassetid://507770453",  -- Cry
+}
+
+function UIController:playCelebrateAnim(side: string)
+	local worldModel = side == "player" and self.elements.myCharWorldModel or self.elements.oppCharWorldModel
+	if not worldModel then return end
+
+	local clone = worldModel:FindFirstChildWhichIsA("Model")
+	if not clone then return end
+
+	local humanoid = clone:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return end
+
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if not animator then return end
+
+	pcall(function()
+		local animId = CELEBRATE_ANIMS[math.random(1, #CELEBRATE_ANIMS)]
+		local anim = Instance.new("Animation")
+		anim.AnimationId = animId
+		local track = animator:LoadAnimation(anim)
+		track.Looped = false
+		track.Priority = Enum.AnimationPriority.Action
+		track:Play()
+	end)
+end
+
+function UIController:playSadAnim(side: string)
+	local worldModel = side == "player" and self.elements.myCharWorldModel or self.elements.oppCharWorldModel
+	if not worldModel then return end
+
+	local clone = worldModel:FindFirstChildWhichIsA("Model")
+	if not clone then return end
+
+	local humanoid = clone:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return end
+
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if not animator then return end
+
+	pcall(function()
+		local animId = SAD_ANIMS[math.random(1, #SAD_ANIMS)]
+		local anim = Instance.new("Animation")
+		anim.AnimationId = animId
+		local track = animator:LoadAnimation(anim)
+		track.Looped = false
+		track.Priority = Enum.AnimationPriority.Action
+		track:Play()
+		-- 1.2초 후 자동 정지
+		task.delay(1.2, function()
+			if track and track.IsPlaying then
+				track:Stop(0.3)
+			end
+		end)
+	end)
+end
+
+-- 에이밍 시 집중 애니메이션 (파워에 따라 진행도 조절)
+function UIController:playFocusAnim()
+	if self._focusTrack then return end -- 이미 재생 중
+
+	local worldModel = self.elements.myCharWorldModel
+	if not worldModel then return end
+	local clone = worldModel:FindFirstChildWhichIsA("Model")
+	if not clone then return end
+	local humanoid = clone:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return end
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if not animator then return end
+
+	pcall(function()
+		local anim = Instance.new("Animation")
+		anim.AnimationId = "rbxassetid://507770239" -- Wave (상체+팔 전체 동작)
+		local track = animator:LoadAnimation(anim)
+		track.Looped = false
+		track.Priority = Enum.AnimationPriority.Action
+		track:Play(0.2, 1, 0) -- speed=0 → 정지 상태, TimePosition으로 수동 제어
+		track.TimePosition = 0
+		self._focusTrack = track
+		self._focusTrackLength = track.Length
+	end)
+end
+
+-- 파워(0~1)에 따라 애니메이션 진행도 갱신
+function UIController:updateFocusAnim(power: number)
+	if not self._focusTrack or not self._focusTrackLength then return end
+	if self._focusTrackLength <= 0 then return end
+	-- power 0 = 시작(idle), power 1 = 애니메이션 60% 지점 (상체까지 활용)
+	self._focusTrack.TimePosition = math.clamp(power, 0, 1) * self._focusTrackLength * 0.6
+end
+
+function UIController:stopFocusAnim()
+	if self._focusTrack then
+		self._focusTrack:Stop(0.3)
+		self._focusTrack = nil
+		self._focusTrackLength = nil
+	end
+end
+
 function UIController:loadMatchCharacters(opponentId: number?)
 	-- 내 캐릭터 (왼쪽, 오른쪽을 바라봄)
 	self:_loadCharIntoViewport(
@@ -1556,7 +1663,7 @@ function UIController:updateSpinIndicator(spin: number, power: number?)
 		ballModel.Shape = Enum.PartType.Ball
 		ballModel.Size = Vector3.one * 2
 		ballModel.Color = Config.BALL.COLORS.RED
-		ballModel.Material = Enum.Material.Marble
+		ballModel.Material = Enum.Material.SmoothPlastic
 		ballModel.Anchored = true
 		ballModel.Position = Vector3.new(0, 0, 0)
 		ballModel.Parent = viewport

@@ -94,7 +94,7 @@ Config.INCLINE_FORCE = 8
 
 -- 바람
 Config.WIND = {
-	FORCE_SCALE = 0.15, -- 바람 세기 → 물리력 변환 계수
+	FORCE_SCALE = 0.22, -- 바람 세기 → 물리력 변환 계수 (최대 바람 12m/s에서도 스핀으로 상쇄 가능)
 	DURATION = 8,       -- VectorForce 지속 시간 (초)
 }
 

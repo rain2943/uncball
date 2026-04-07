@@ -114,7 +114,7 @@ function LaunchController:_createPreview()
 	preview.Shape = Enum.PartType.Ball
 	preview.Size = Vector3.one * Config.BALL.RADIUS * 2
 	preview.Color = self.teamColor or Config.BALL.COLORS.RED
-	preview.Material = Enum.Material.Marble
+	preview.Material = Enum.Material.SmoothPlastic
 	preview.Transparency = 1
 	preview.Anchored = true
 	preview.CanCollide = false
@@ -318,6 +318,7 @@ function LaunchController:_setupInput()
 				self.spin = 0
 				self:_showPreview(true)
 				if self.ui then self.ui:updateSpinIndicator(0) end
+				if self.ui and self.ui.stopFocusAnim then self.ui:stopFocusAnim() end
 			end
 		end
 
@@ -372,10 +373,18 @@ function LaunchController:_setupInput()
 				-- 타이밍 커서 시작
 				self.timingPos = 1
 				self.timingDirection = 1
+				-- 집중 애니메이션
+				if self.ui and self.ui.playFocusAnim then
+					self.ui:playFocusAnim()
+				end
 			end
 			-- 세로: 파워 (스크린 Y 기준, 아래로 당길수록 강하게)
 			local pullback = math.max(dy - 30, 0)
 			self.power = math.clamp(pullback / PULLBACK_PX_FOR_MAX, 0, 1)
+			-- 파워에 따라 집중 애니메이션 진행도 갱신
+			if self.ui and self.ui.updateFocusAnim then
+				self.ui:updateFocusAnim(self.power)
+			end
 			-- 가로: 스핀 (스크린 X 기준, AIMING 시작점 대비)
 			-- 데드존 20px: 좌우 미세 흔들림 무시
 			local screenDx = input.Position.X - self.aimStartPos.X
@@ -396,6 +405,9 @@ function LaunchController:_setupInput()
 			self.spin = 0
 			self.aimStartPos = nil
 			self:_hideGuide()
+			if self.ui and self.ui.stopFocusAnim then
+				self.ui:stopFocusAnim()
+			end
 
 			local worldPos = self:_screenToWorldPos(input.Position.X, input.Position.Y)
 			local xRange = Config.LAUNCH.SPAWN_X_RANGE
@@ -446,6 +458,9 @@ function LaunchController:_launch()
 	self:_showPreview(false)
 	self:_hideGuide()
 	self.state = "IDLE"
+	if self.ui and self.ui.stopFocusAnim then
+		self.ui:stopFocusAnim()
+	end
 
 	-- 턴 타이머 즉시 숨기기
 	if self.ui and self.ui.hideTurnTimer then

@@ -472,6 +472,11 @@ remoteEvents.BallLanded.OnClientEvent:Connect(function(data)
 	if data.zone and data.points > 0 then
 		ui:showScorePopup(data.position, data.points, data.team)
 		playSound(SFX.SCORE, 0.5)
+		-- 득점 시 해당 팀 캐릭터 세레브 애니메이션
+		ui:playCelebrateAnim(data.team)
+	elseif not data.zone and data.team then
+		-- 공 아웃 (슬롯 미안착) → 해당 팀 슬퍼하는 애니메이션
+		ui:playSadAnim(data.team)
 	end
 	-- 콤보/올킬 연출
 	if data.isAllKill then
@@ -580,7 +585,7 @@ remoteEvents.PreviewUpdate.OnClientEvent:Connect(function(spawnX, power, spin)
 		opponentPreview.Shape = Enum.PartType.Ball
 		opponentPreview.Size = Vector3.one * Config.BALL.RADIUS * 2
 		opponentPreview.Color = opponentTeamColor
-		opponentPreview.Material = Enum.Material.Marble
+		opponentPreview.Material = Enum.Material.SmoothPlastic
 		opponentPreview.Transparency = 0.4
 		opponentPreview.Anchored = true
 		opponentPreview.CanCollide = false
