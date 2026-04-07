@@ -507,7 +507,7 @@ local CELEBRATE_ANIMS = {
 	"rbxassetid://507770677",  -- Cheer
 }
 local SAD_ANIMS = {
-	"rbxassetid://507770453",  -- Cry
+	"rbxassetid://507766666",  -- Death (쓰러지기)
 }
 
 function UIController:playCelebrateAnim(side: string)
@@ -1639,7 +1639,12 @@ function UIController:updateSpinIndicator(spin: number, power: number?)
 		local frame = Instance.new("Frame")
 		frame.Name = "SpinFrame"
 		frame.Size = UDim2.new(0, 90, 0, 110)
-		frame.Position = UDim2.new(0, 10, 0.28, 0)
+		-- PC: 미션 패널(270px) 아래로 배치, 모바일: 좌측
+		local vpSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+		local isMobileLayout = vpSize.Y > vpSize.X
+		frame.Position = isMobileLayout
+			and UDim2.new(0, 10, 0.35, 0)
+			or UDim2.new(0, 10, 0.55, 0)
 		frame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 		frame.BackgroundTransparency = 0.08
 		frame.BorderSizePixel = 0
