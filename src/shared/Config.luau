@@ -24,7 +24,6 @@ Config.ZONES = {
 		RADIUS = 7,
 		BASE_POINTS = 1,
 		LABELS = { "D", "C", "B", "A", "B", "C", "D" },
-		GRAND_SLAM_BONUS = 3,
 		COLOR = Color3.fromRGB(245, 242, 238),
 	},
 	[2] = {
@@ -33,7 +32,6 @@ Config.ZONES = {
 		RADIUS = 5.5,
 		BASE_POINTS = 2,
 		LABELS = { "C", "B", "A", "B", "C" },
-		GRAND_SLAM_BONUS = 5,
 		COLOR = Color3.fromRGB(245, 242, 238),
 	},
 	[3] = {
@@ -42,7 +40,6 @@ Config.ZONES = {
 		RADIUS = 4,
 		BASE_POINTS = 5,
 		LABELS = { "B", "A", "B" },
-		GRAND_SLAM_BONUS = 9,
 		COLOR = Color3.fromRGB(245, 242, 238),
 	},
 }
@@ -66,12 +63,12 @@ Config.BALL = {
 
 -- 게임 규칙
 Config.GAME = {
-	BALLS_PER_PLAYER = 10,
+	BALLS_PER_PLAYER = 8,
 	TURN_TIME = 20,
 	BALL_SETTLE_VELOCITY = 0.3,
 	BALL_SETTLE_TIMEOUT = 12,
 	BALL_OUT_Y = 1,
-	CONSECUTIVE_BONUS = { [2] = 1, [3] = 3, [4] = 6, [5] = 10, [6] = 15, [7] = 21 },
+	ALL_KILL_MULTIPLIER = 2, -- 올킬 시 마지막 공 배수
 }
 
 -- 발사 (플릭 방식)
@@ -94,6 +91,12 @@ Config.SPIN = {
 
 -- 경사
 Config.INCLINE_FORCE = 8
+
+-- 바람
+Config.WIND = {
+	FORCE_SCALE = 0.15, -- 바람 세기 → 물리력 변환 계수
+	DURATION = 8,       -- VectorForce 지속 시간 (초)
+}
 
 -- AI
 Config.AI = {
@@ -137,13 +140,14 @@ Config.MISSIONS = {
 	EASY_BONUS = 3,
 	MEDIUM_BONUS = 6,
 	HARD_BONUS = 10,
+	-- 미션 레터 = 슬롯 라벨 (A×3, B×6, C×4, D×2 존재)
 	EASY_POOL = {
 		{ "A", "B", "C" },
 		{ "B", "C", "D" },
-		{ "A", "C", "D" },
 		{ "A", "B", "D" },
 		{ "B", "B", "C" },
 		{ "A", "B", "B" },
+		{ "A", "C", "D" },
 	},
 	MEDIUM_POOL = {
 		{ "A", "B", "C", "D" },
@@ -187,6 +191,8 @@ Config.REMOTES = {
 	"PreviewUpdate",
 	"TimingGrade",
 	"SendEmoji",
+	"RankUpdate",
+	"WindUpdate",
 }
 
 return Config

@@ -187,6 +187,37 @@ function LobbyController:_createUI()
 
 	self.skinBtn = skinBtn
 
+	-- 랭크 표시 (타이틀 스타일: 닉네임 + RATING 라벨 + 큰 숫자)
+	local rankPanel = Instance.new("Frame")
+	rankPanel.Name = "RankPanel"
+	rankPanel.BackgroundTransparency = 1
+	rankPanel.BorderSizePixel = 0
+	rankPanel.Parent = container
+	self.rankPanel = rankPanel
+
+	local rankName = Instance.new("TextLabel")
+	rankName.Name = "RankName"
+	rankName.BackgroundTransparency = 1
+	rankName.Text = Players.LocalPlayer.DisplayName
+	rankName.TextColor3 = Color3.fromRGB(255, 255, 255)
+	rankName.Font = FONT_TITLE
+	rankName.TextScaled = true
+	rankName.Parent = rankPanel
+	addStroke(rankName, Color3.fromRGB(20, 60, 120), 2)
+	self.rankName = rankName
+
+	local rankScore = Instance.new("TextLabel")
+	rankScore.Name = "RankScore"
+	rankScore.BackgroundTransparency = 1
+	rankScore.Text = "1,000"
+	rankScore.TextColor3 = Color3.fromRGB(255, 210, 50)
+	rankScore.Font = FONT_TITLE
+	rankScore.TextScaled = true
+	rankScore.Parent = rankPanel
+	addStroke(rankScore, Color3.fromRGB(180, 120, 0), 3)
+
+	self.rankScore = rankScore
+
 	-- PLAY 버튼 클릭
 	playBtn.MouseButton1Click:Connect(function()
 		if self.isMatching then return end
@@ -248,6 +279,16 @@ function LobbyController:_applyPortraitLayout()
 
 	self.soonLabel.Size = UDim2.new(0.4, 0, 0, 14)
 	self.soonLabel.Position = UDim2.new(0.3, 0, 0, 152)
+
+	-- 랭크: 메뉴 패널 바로 위, 가운데 정렬
+	self.rankPanel.Size = UDim2.new(0.5, 0, 0, 50)
+	self.rankPanel.Position = UDim2.new(0.25, 0, 1, -268)
+	self.rankName.Size = UDim2.new(1, 0, 0, 16)
+	self.rankName.Position = UDim2.new(0, 0, 0, 0)
+	self.rankName.TextXAlignment = Enum.TextXAlignment.Center
+	self.rankScore.Size = UDim2.new(1, 0, 0, 30)
+	self.rankScore.Position = UDim2.new(0, 0, 0, 18)
+	self.rankScore.TextXAlignment = Enum.TextXAlignment.Center
 end
 
 -- PC 가로 레이아웃
@@ -284,6 +325,16 @@ function LobbyController:_applyLandscapeLayout()
 
 	self.soonLabel.Size = UDim2.new(0.5, 0, 0, 14)
 	self.soonLabel.Position = UDim2.new(0.25, 0, 0, 184)
+
+	-- 랭크: 우하단, 타이틀과 같은 우측 정렬
+	self.rankPanel.Size = UDim2.new(0, panelW, 0, 85)
+	self.rankPanel.Position = UDim2.new(1, -rightEdge, 1, -105)
+	self.rankName.Size = UDim2.new(1, 0, 0, 26)
+	self.rankName.Position = UDim2.new(0, 0, 0, 0)
+	self.rankName.TextXAlignment = Enum.TextXAlignment.Right
+	self.rankScore.Size = UDim2.new(1, 0, 0, 55)
+	self.rankScore.Position = UDim2.new(0, 0, 0, 28)
+	self.rankScore.TextXAlignment = Enum.TextXAlignment.Right
 end
 
 -- ===== 매칭 =====
@@ -353,6 +404,17 @@ function LobbyController:hide()
 		self._matchingThread = nil
 	end
 	self.gui.Enabled = false
+end
+
+function LobbyController:updateRank(rank: number)
+	if self.rankScore then
+		-- 천 단위 콤마 포맷
+		local formatted = tostring(rank)
+		if rank >= 1000 then
+			formatted = string.format("%d,%03d", math.floor(rank / 1000), rank % 1000)
+		end
+		self.rankScore.Text = formatted
+	end
 end
 
 -- ===== 캐릭터 뷰포트 =====

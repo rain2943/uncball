@@ -2,6 +2,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 local GameManager = require(script:WaitForChild("GameManager"))
+local RankManager = require(script:WaitForChild("RankManager"))
 
 -- RemoteEvent 생성
 local remotes = Instance.new("Folder")
@@ -94,10 +95,15 @@ local function startAIMatch(player)
 	local gm = GameManager.new()
 	gm:init(remoteEvents, tableOffset)
 	gm._tableSlotIdx = slotIdx
-	gm.onMatchEnd = function()
+	gm.onMatchEnd = function(winner)
 		playerGMs[player] = nil
 		releaseTableSlot(slotIdx)
 		removeFromQueue(player)
+		-- 랭크는 GameManager._endMatch에서 이미 처리됨
+		-- RankUpdate로 로비 UI 갱신
+		if player.Parent then
+			remoteEvents.RankUpdate:FireClient(player, RankManager.getRank(player), 0)
+		end
 	end
 	gm:startMatch(player)
 	playerGMs[player] = gm
@@ -136,10 +142,17 @@ local function startPvPMatch(player1, player2)
 	local gm = GameManager.new()
 	gm:init(remoteEvents, tableOffset)
 	gm._tableSlotIdx = slotIdx
-	gm.onMatchEnd = function()
+	gm.onMatchEnd = function(winner)
 		playerGMs[player1] = nil
 		playerGMs[player2] = nil
 		releaseTableSlot(slotIdx)
+		-- 랭크는 GameManager._endMatch에서 이미 처리됨
+		-- RankUpdate로 로비 UI 갱신
+		for _, p in { player1, player2 } do
+			if p.Parent then
+				remoteEvents.RankUpdate:FireClient(p, RankManager.getRank(p), 0)
+			end
+		end
 	end
 	gm:startMatch(player1, player2)
 	playerGMs[player1] = gm
@@ -337,6 +350,9 @@ end)
 
 -- 플레이어 퇴장
 Players.PlayerRemoving:Connect(function(player)
+	-- 랭크 저장 + 캐시 해제
+	RankManager.save(player)
+	RankManager.unload(player)
 	-- 큐 제거
 	removeFromQueue(player)
 	if matchTimers[player] then
@@ -359,10 +375,20 @@ Players.PlayerRemoving:Connect(function(player)
 			if remaining == gm.opponent then
 				finalScores = { player = gm.scores.ai, ai = gm.scores.player }
 			end
+			-- 퇴장 시 남은 플레이어 승리 → 랭크 반영
+			local change = 0
+			if gm.opponent then
+				-- PvP였으면 승리 보상 (상대 퇴장 = 내 승리)
+				local winnerStr = (remaining == gm.player) and "player" or "ai"
+				local pChange, oChange = RankManager.applyPvPResult(gm.player, gm.opponent, winnerStr)
+				change = (remaining == gm.player) and pChange or oChange
+			end
 			remoteEvents.MatchEnd:FireClient(remaining, {
 				winner = "player",
 				scores = finalScores,
 				disconnected = true,
+				rankChange = change,
+				newRank = RankManager.getRank(remaining),
 			})
 		end
 
@@ -407,6 +433,13 @@ local function hidePlayerCharacter(player)
 end
 
 Players.PlayerAdded:Connect(function(player)
+	-- 랭크 로드 + 클라이언트에 전송
+	task.spawn(function()
+		local rank = RankManager.load(player)
+		if player.Parent then
+			remoteEvents.RankUpdate:FireClient(player, rank, 0)
+		end
+	end)
 	player.CharacterAdded:Connect(function(char)
 		task.wait(0.1)
 		if not playerGMs[player] then
@@ -427,6 +460,13 @@ for _, player in Players:GetPlayers() do
 		task.wait(0.1)
 		if not playerGMs[player] then
 			hidePlayerCharacter(player)
+		end
+	end)
+	-- 랭크 로드
+	task.spawn(function()
+		local rank = RankManager.load(player)
+		if player.Parent then
+			remoteEvents.RankUpdate:FireClient(player, rank, 0)
 		end
 	end)
 end

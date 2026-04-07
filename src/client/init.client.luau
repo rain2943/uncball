@@ -122,6 +122,128 @@ end
 -- 매치 상태 추적
 local inMatch = false
 local currentTableOffset = Vector3.zero
+local localRank = 1000
+local pendingRankChange = nil
+local pendingNewRank = nil
+
+-- 바람 시각 이펙트 (Trail 기반 — 공 스핀 트레일과 같은 스타일)
+local windTrails = {} -- { part, trail, att0, att1 }
+local windLoopThread = nil
+local currentWindSpeed = 0
+local currentWindAngle = 0
+
+local function spawnWindTrail()
+	local rad = math.rad(currentWindAngle)
+	local dir = Vector3.new(math.cos(rad), 0, math.sin(rad))
+	local right = Vector3.new(-dir.Z, 0, dir.X)
+
+	-- 테이블 전체 영역에 고르게 분포
+	local y = 4.0 + math.random() * 3.0
+	local spread = (math.random() - 0.5) * 30
+	local along = (math.random() - 0.5) * 60
+	local startPos = currentTableOffset + Vector3.new(0, y, 0) + dir * along + right * spread
+
+	local part = Instance.new("Part")
+	part.Name = "WindTrailPart"
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.Transparency = 1
+	part.Size = Vector3.new(0.1, 0.1, 0.1)
+	part.CFrame = CFrame.new(startPos)
+	part.Parent = workspace
+
+	local att0 = Instance.new("Attachment")
+	att0.Position = Vector3.new(0, 0.08, 0)
+	att0.Parent = part
+
+	local att1 = Instance.new("Attachment")
+	att1.Position = Vector3.new(0, -0.08, 0)
+	att1.Parent = part
+
+	local trail = Instance.new("Trail")
+	trail.Attachment0 = att0
+	trail.Attachment1 = att1
+	trail.Lifetime = 0.8
+	trail.MinLength = 0.02
+	trail.FaceCamera = true
+	trail.LightEmission = 0.4
+	trail.WidthScale = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.5, 0.6),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	trail.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.2),
+		NumberSequenceKeypoint.new(0.5, 0.5),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	trail.Color = ColorSequence.new(Color3.fromRGB(160, 200, 255), Color3.fromRGB(100, 150, 230))
+	trail.Parent = part
+
+	table.insert(windTrails, {
+		part = part,
+		dir = dir,
+		speed = currentWindSpeed * (1.6 + math.random() * 0.8),
+		life = 0,
+		maxLife = 1.8 + math.random() * 0.8,
+	})
+end
+
+local function cleanupWindStreaks()
+	for _, s in windTrails do
+		if s.part and s.part.Parent then s.part:Destroy() end
+	end
+	windTrails = {}
+	if windLoopThread then
+		task.cancel(windLoopThread)
+		windLoopThread = nil
+	end
+end
+
+local function startWindLoop()
+	if windLoopThread then return end
+	windLoopThread = task.spawn(function()
+		local spawnTimer = 0
+		while true do
+			local dt = task.wait()
+			if not inMatch then break end
+
+			local spawnRate = math.clamp(currentWindSpeed * 0.8, 2, 10)
+			spawnTimer = spawnTimer + dt * spawnRate
+			while spawnTimer >= 1 do
+				spawnTimer = spawnTimer - 1
+				spawnWindTrail()
+			end
+
+			local alive = {}
+			for _, s in windTrails do
+				s.life = s.life + dt
+				if s.life >= s.maxLife then
+					if s.part and s.part.Parent then s.part:Destroy() end
+				else
+					s.part.CFrame = s.part.CFrame + s.dir * s.speed * dt
+					table.insert(alive, s)
+				end
+			end
+			windTrails = alive
+		end
+	end)
+end
+
+local function createWindParticle()
+	startWindLoop()
+end
+
+local function destroyWindParticle()
+	cleanupWindStreaks()
+end
+
+local function updateWindParticle(speed, angle)
+	currentWindSpeed = speed
+	currentWindAngle = angle
+end
 
 -- 초기 상태: 로비 보이기, HUD 숨기기
 ui:hide()
@@ -270,6 +392,12 @@ remoteEvents.MatchStart.OnClientEvent:Connect(function(data)
 		ui:initMissions(data.missions)
 	end
 
+	-- 랭크 표시
+	ui:setRanks(data.myRank or localRank, data.opponentRank or 0)
+
+	-- 바람 파티클 생성
+	createWindParticle()
+
 	-- BGM 변경 (매치용 랜덤 곡)
 	playBGM()
 
@@ -282,8 +410,14 @@ remoteEvents.MatchStart.OnClientEvent:Connect(function(data)
 	end)
 end)
 
-remoteEvents.TurnChanged.OnClientEvent:Connect(function(isPlayerTurn, _remainingBalls, isBonus)
+remoteEvents.TurnChanged.OnClientEvent:Connect(function(isPlayerTurn, _remainingBalls, isBonus, windData)
 	if not inMatch then return end
+	-- 턴 전환 시 상대 프리뷰/가이드 도트 정리 (타임아웃 시 BallCreated 안 오므로 여기서 처리)
+	if opponentPreview and opponentPreview.Parent then
+		opponentPreview:Destroy()
+		opponentPreview = nil
+	end
+	hideOppGuideDots()
 	ui:setTurn(isPlayerTurn, isBonus)
 	launch:setEnabled(isPlayerTurn)
 	camera:enterLaunchView()
@@ -293,6 +427,11 @@ remoteEvents.TurnChanged.OnClientEvent:Connect(function(isPlayerTurn, _remaining
 		ui:showLaunchGuide()
 	else
 		ui:hideLaunchGuide()
+	end
+	-- 바람 업데이트
+	if windData and windData.speed then
+		ui:updateWind(windData.speed, windData.angle)
+		updateWindParticle(windData.speed, windData.angle)
 	end
 end)
 
@@ -334,6 +473,12 @@ remoteEvents.BallLanded.OnClientEvent:Connect(function(data)
 		ui:showScorePopup(data.position, data.points, data.team)
 		playSound(SFX.SCORE, 0.5)
 	end
+	-- 콤보/올킬 연출
+	if data.isAllKill then
+		ui:showComboPopup(0, true, data.team)
+	elseif data.comboCount and data.comboCount >= 2 then
+		ui:showComboPopup(data.comboCount, false, data.team)
+	end
 	if data.missions then
 		ui:updateMissions(data.missions, data.playerLetters)
 	end
@@ -352,8 +497,10 @@ remoteEvents.MatchEnd.OnClientEvent:Connect(function(data)
 	inMatch = false
 	launch:setEnabled(false)
 	destroyOppGuideDots()
+	destroyWindParticle()
 	ui:hideTurnTimer()
 	ui:hideLaunchGuide()
+	ui:hideWind()
 
 	-- 강제 종료 (PvP 전환 등) → 결과 화면 없이 즉시 정리
 	if data.forced then
@@ -368,9 +515,14 @@ remoteEvents.MatchEnd.OnClientEvent:Connect(function(data)
 	if data.disconnected then
 		ui:setOpponentName("Leave!")
 	end
+	-- 랭크 변동 저장 (로비 복귀 시 갱신)
+	if data.newRank then
+		localRank = data.newRank
+	end
+
 	-- 카메라를 OVERVIEW에 유지한 채 결과 화면 표시
 	camera:returnToOverview()
-	ui:showMatchResult(data.winner, data.scores)
+	ui:showMatchResult(data.winner, data.scores, data.rankChange, data.newRank)
 
 	-- 5초 후 암전 → 로비 복귀
 	task.delay(4.5, function()
@@ -473,6 +625,12 @@ remoteEvents.MatchEnd.OnClientEvent:Connect(function()
 		opponentPreview:Destroy()
 		opponentPreview = nil
 	end
+end)
+
+-- 랭크 업데이트 수신
+remoteEvents.RankUpdate.OnClientEvent:Connect(function(newRank, change)
+	localRank = newRank
+	lobby:updateRank(newRank)
 end)
 
 print("[Uncball] Client initialized - lobby mode")

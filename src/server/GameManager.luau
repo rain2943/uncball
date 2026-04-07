@@ -3,6 +3,7 @@ local RunService = game:GetService("RunService")
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 local TableBuilder = require(script.Parent:WaitForChild("TableBuilder"))
 local AIPlayer = require(script.Parent:WaitForChild("AIPlayer"))
+local RankManager = require(script.Parent:WaitForChild("RankManager"))
 
 local GameManager = {}
 GameManager.__index = GameManager
@@ -88,6 +89,7 @@ function GameManager:startMatch(player, opponent)
 	self.remainingBalls = { player = Config.GAME.BALLS_PER_PLAYER, ai = Config.GAME.BALLS_PER_PLAYER }
 	-- 선턴: PvP면 랜덤, AI면 플레이어 선턴
 	self.currentTurn = opponent and (math.random() < 0.5 and "player" or "ai") or "player"
+	self.currentWind = { speed = 0, angle = 0 }
 	self.settledBalls = {}
 	self.looseBalls = {}
 	self._lastTurn = false
@@ -109,6 +111,8 @@ function GameManager:startMatch(player, opponent)
 
 	-- 매치 시작 알림
 	local offsetArr = { self.tableOffset.X, self.tableOffset.Y, self.tableOffset.Z }
+	local myRank = RankManager.getRank(player)
+	local oppRank = self.opponent and RankManager.getRank(self.opponent) or 0
 	local matchData = {
 		ballsPerPlayer = Config.GAME.BALLS_PER_PLAYER,
 		missions = self.missions,
@@ -117,6 +121,8 @@ function GameManager:startMatch(player, opponent)
 		opponentId = self.opponent and self.opponent.UserId or nil,
 		teamColor = "red",
 		tableOffset = offsetArr,
+		myRank = myRank,
+		opponentRank = oppRank,
 	}
 
 	self.remotes.MatchStart:FireClient(player, matchData)
@@ -128,6 +134,8 @@ function GameManager:startMatch(player, opponent)
 			opponentId = player.UserId,
 			teamColor = "blue",
 			tableOffset = offsetArr,
+			myRank = oppRank,
+			opponentRank = myRank,
 		}
 		self.remotes.MatchStart:FireClient(self.opponent, oppData)
 	end
@@ -140,13 +148,32 @@ function GameManager:startMatch(player, opponent)
 	end
 end
 
+function GameManager:_generateWind()
+	-- 가중 랜덤: 3~5(70%), 6~8(20%), 9~12(10%)
+	local roll = math.random()
+	local speed
+	if roll < 0.70 then
+		speed = 3 + math.random() * 2        -- 3~5
+	elseif roll < 0.90 then
+		speed = 6 + math.random() * 2        -- 6~8
+	else
+		speed = 9 + math.random() * 3        -- 9~12
+	end
+	speed = math.round(speed * 10) / 10 -- 소수점 1자리
+
+	local angle = math.random() * 360 -- 0~360도
+	self.currentWind = { speed = speed, angle = angle }
+end
+
 function GameManager:_startPlayerTurn(isBonus: boolean?)
 	if self.turnTimer then task.cancel(self.turnTimer); self.turnTimer = nil end
 	self._isBonusTurn = isBonus or false
+	self:_generateWind()
 	self.state = "PLAYER_TURN"
-	self:_fireClient("TurnChanged", self.player, true, self.remainingBalls.player, isBonus or false)
+	local windData = self.currentWind
+	self:_fireClient("TurnChanged", self.player, true, self.remainingBalls.player, isBonus or false, windData)
 	if self.opponent then
-		self:_fireClient("TurnChanged", self.opponent, false, self.remainingBalls.player, false)
+		self:_fireClient("TurnChanged", self.opponent, false, self.remainingBalls.player, isBonus or false, windData)
 	end
 	self:_broadcastState()
 
@@ -155,6 +182,9 @@ function GameManager:_startPlayerTurn(isBonus: boolean?)
 		self.turnTimer = nil -- 자기 자신 참조 해제 (cancel 충돌 방지)
 		if self._destroyed then return end
 		if self.state ~= "PLAYER_TURN" then return end
+
+		-- 즉시 상태 변경 → 타임아웃 직후 발사 요청 차단
+		self.state = "BALL_MOVING"
 
 		if not self._isBonusTurn then
 			self.remainingBalls.player -= 1
@@ -236,9 +266,11 @@ function GameManager:_executeAITurn(isBonus: boolean?)
 
 	-- PvP: 상대방 턴
 	if self.opponent then
+		self:_generateWind()
 		self.state = "OPPONENT_TURN"
-		self:_fireClient("TurnChanged", self.player, false, self.remainingBalls.ai, isBonus or false)
-		self:_fireClient("TurnChanged", self.opponent, true, self.remainingBalls.ai, isBonus or false)
+		local windData = self.currentWind
+		self:_fireClient("TurnChanged", self.player, false, self.remainingBalls.ai, isBonus or false, windData)
+		self:_fireClient("TurnChanged", self.opponent, true, self.remainingBalls.ai, isBonus or false, windData)
 		self:_broadcastState()
 
 		-- 턴 제한시간
@@ -246,6 +278,9 @@ function GameManager:_executeAITurn(isBonus: boolean?)
 			self.turnTimer = nil -- 자기 자신 참조 해제
 			if self._destroyed then return end
 			if self.state ~= "OPPONENT_TURN" then return end
+
+			-- 즉시 상태 변경 → 타임아웃 직후 발사 요청 차단
+			self.state = "BALL_MOVING"
 
 			if not self._isBonusTurn then
 				self.remainingBalls.ai -= 1
@@ -274,11 +309,13 @@ function GameManager:_executeAITurn(isBonus: boolean?)
 	end
 
 	-- AI 대전
+	self:_generateWind()
 	self.state = "AI_TURN"
-	self:_fireClient("TurnChanged", self.player, false, self.remainingBalls.ai, isBonus or false)
+	local windData = self.currentWind
+	self:_fireClient("TurnChanged", self.player, false, self.remainingBalls.ai, isBonus or false, windData)
 
 	task.spawn(function()
-		local direction, power, spin, aiSpawnX = self.ai:decide(self.slotOwners)
+		local direction, power, spin, aiSpawnX = self.ai:decide(self.slotOwners, self.currentWind)
 		task.wait(0.8)
 		self:_fireClient("TurnChanged", self.player, false, self.remainingBalls.ai)
 		task.wait(1.0)
@@ -317,6 +354,9 @@ function GameManager:_createBall(team: string, spawnX: number?): Part
 
 	-- 먼저 workspace에 넣기 (물리 활성화)
 	ball.Parent = workspace
+
+	-- 네트워크 소유권 서버 고정 (자동 전환으로 인한 끊김 방지)
+	ball:SetNetworkOwner(nil)
 
 	-- 1프레임 대기 후 물리 적용 (mass 계산 보장)
 	task.wait()
@@ -431,6 +471,28 @@ function GameManager:_launchBall(ball: Part, direction: Vector3, power: number, 
 		end)
 	end
 
+	-- 바람: 지속 횡력 (턴에 설정된 방향/세기)
+	if self.currentWind and self.currentWind.speed > 0 then
+		local rad = math.rad(self.currentWind.angle)
+		local windDir = Vector3.new(math.cos(rad), 0, math.sin(rad))
+		local windMag = self.currentWind.speed * mass * Config.WIND.FORCE_SCALE
+
+		local windAtt = Instance.new("Attachment")
+		windAtt.Parent = ball
+
+		local windForce = Instance.new("VectorForce")
+		windForce.Name = "WindForce"
+		windForce.Attachment0 = windAtt
+		windForce.Force = windDir * windMag
+		windForce.RelativeTo = Enum.ActuatorRelativeTo.World
+		windForce.Parent = ball
+
+		task.delay(Config.WIND.DURATION, function()
+			if windForce and windForce.Parent then windForce:Destroy() end
+			if windAtt and windAtt.Parent then windAtt:Destroy() end
+		end)
+	end
+
 	-- 스핀: 횡방향 지속 힘 (커브 궤적)
 	if math.abs(spin) > 0.05 then
 		local rightDir = Vector3.new(dir3.Z, 0, -dir3.X)
@@ -481,15 +543,17 @@ function GameManager:_waitForSettle(ball: Part, team: string)
 			return
 		end
 
-		-- 속도와 무관하게 슬롯 안착 체크 (느리게 굴러들어가는 경우 대응)
-		local zoneNum, slotIdx = self:_checkSlotLanding(ball)
-		if zoneNum and self:_snapBallToSlot(ball, zoneNum, slotIdx, team) ~= false then
-			self:_checkLooseBalls()
-			self:_onBallResult(zoneNum, slotIdx, team, ball)
-			return
-		end
-
 		local vel = ball.AssemblyLinearVelocity.Magnitude
+
+		-- 거의 멈췄을 때만 슬롯 안착 체크 (자연스러운 착지)
+		if vel < 1.2 then
+			local zoneNum, slotIdx = self:_checkSlotLanding(ball)
+			if zoneNum and self:_snapBallToSlot(ball, zoneNum, slotIdx, team) ~= false then
+				self:_checkLooseBalls()
+				self:_onBallResult(zoneNum, slotIdx, team, ball)
+				return
+			end
+		end
 
 		if vel < 0.8 then
 			-- 1.2초 대기 후 재확인 (턱/포스트에 걸렸다 굴러갈 수 있음)
@@ -563,26 +627,43 @@ function GameManager:_checkLooseBalls()
 			if zoneNum and self:_snapBallToSlot(ball, zoneNum, slotIdx, team) ~= false then
 				-- 후속타로 슬롯에 들어감! 점수 재계산
 				print("[Uncball] Loose ball scored! team:", team, "zone:", zoneNum, "slot:", slotIdx)
+
+				-- 콤보/올킬 계산
+				local zoneConfig = Config.ZONES[zoneNum]
+				local slots = self.slotOwners[zoneNum]
+				local left = slotIdx - 1
+				while left >= 1 and slots[left] == team do left = left - 1 end
+				local right = slotIdx + 1
+				while right <= zoneConfig.SLOTS and slots[right] == team do right = right + 1 end
+				local looseCombo = right - left - 1
+				local looseAllKill = true
+				for ii = 1, zoneConfig.SLOTS do
+					if slots[ii] ~= team then looseAllKill = false; break end
+				end
+
+				local scoreBefore = self.scores[team] or 0
 				self:_recalculateScores()
+				local scoreAfter = self.scores[team] or 0
+				local pts = scoreAfter - scoreBefore
 				local newMissions = self:_checkMissions(team)
 				self:_broadcastState()
 
-				-- 점수 팝업
-				local pts = Config.ZONES[zoneNum].BASE_POINTS
 				self:_fireClient("BallLanded", self.player, {
 					zone = zoneNum, slot = slotIdx, team = team,
-					points = pts, position = ball.Position,
+					points = math.max(pts, 0), position = ball.Position,
 					scores = self.scores, missions = self.missions,
 					newMissions = newMissions, playerLetters = self:_collectLetters("player"),
+					comboCount = looseCombo, isAllKill = looseAllKill,
 				})
 				if self.opponent then
 					self:_fireClient("BallLanded", self.opponent, {
 						zone = zoneNum, slot = slotIdx,
 						team = team == "player" and "ai" or "player",
-						points = pts, position = ball.Position,
+						points = math.max(pts, 0), position = ball.Position,
 						scores = { player = self.scores.ai, ai = self.scores.player },
 						missions = self:_flipMissions(), newMissions = newMissions,
 						playerLetters = self:_collectLetters("ai"),
+						comboCount = looseCombo, isAllKill = looseAllKill,
 					})
 				end
 				continue -- 이 공은 안착됨, looseBalls에서 제거
@@ -631,10 +712,12 @@ function GameManager:_snapBallToSlot(ball: Part, zoneNum: number, slotIdx: numbe
 	self.slotOwners[zoneNum][slotIdx] = team
 	print("[Uncball] Slot claimed! zone:", zoneNum, "slot:", slotIdx, "team:", team)
 
-	-- 물리적으로 멈춘 위치 그대로 고정 (스냅 없음 = 자연스러운 위치)
+	-- 슬롯 중앙으로 스냅 (클라이언트 간 위치 불일치 방지)
+	local slotPos = self.slotPositions[zoneNum][slotIdx]
+	ball.Anchored = true
+	ball.Position = Vector3.new(slotPos.X, slotPos.Y + Config.BALL.RADIUS, slotPos.Z)
 	ball.AssemblyLinearVelocity = Vector3.zero
 	ball.AssemblyAngularVelocity = Vector3.zero
-	ball.Anchored = true
 	ball.CanCollide = true
 
 	-- 힘 제거
@@ -649,7 +732,37 @@ function GameManager:_snapBallToSlot(ball: Part, zoneNum: number, slotIdx: numbe
 end
 
 function GameManager:_onBallResult(zoneNum, slotIdx, team, ball)
-	-- 점수 차이 계산 (기본점 + 연속 보너스 + 그랜드슬램)
+	-- 콤보 체인 + 올킬 계산 (점수 재계산 전)
+	local comboCount = 0
+	local isAllKill = false
+
+	if zoneNum then
+		local slots = self.slotOwners[zoneNum]
+		local zoneConfig = Config.ZONES[zoneNum]
+
+		-- 연속 체인 길이 계산 (좌우 탐색)
+		local left = slotIdx - 1
+		while left >= 1 and slots[left] == team do
+			left = left - 1
+		end
+		local right = slotIdx + 1
+		while right <= zoneConfig.SLOTS and slots[right] == team do
+			right = right + 1
+		end
+		comboCount = right - left - 1 -- 이 공 포함 체인 길이
+
+		-- 올킬 체크: 트레이 전체가 내 공인지
+		local allMine = true
+		for i = 1, zoneConfig.SLOTS do
+			if slots[i] ~= team then
+				allMine = false
+				break
+			end
+		end
+		isAllKill = allMine
+	end
+
+	-- 점수 차이 계산 (콤보 + 올킬 반영)
 	local scoreBefore = self.scores[team] or 0
 	self:_recalculateScores()
 	local scoreAfter = self.scores[team] or 0
@@ -669,6 +782,8 @@ function GameManager:_onBallResult(zoneNum, slotIdx, team, ball)
 		missions = self.missions,
 		newMissions = newMissions,
 		playerLetters = self:_collectLetters("player"),
+		comboCount = comboCount,
+		isAllKill = isAllKill,
 	}
 	self:_fireClient("BallLanded", self.player, landedData)
 	if self.opponent then
@@ -682,6 +797,8 @@ function GameManager:_onBallResult(zoneNum, slotIdx, team, ball)
 			missions = self:_flipMissions(),
 			newMissions = newMissions,
 			playerLetters = self:_collectLetters("ai"),
+			comboCount = comboCount,
+			isAllKill = isAllKill,
 		}
 		self:_fireClient("BallLanded", self.opponent, oppLandedData)
 	end
@@ -800,7 +917,7 @@ function GameManager:_flipMissions(): { any }
 	return flipped
 end
 
--- 팀의 보유 레터 수집
+-- 팀의 보유 슬롯 라벨 수집 (A/B/C/D, 모든 트레이 합산)
 function GameManager:_collectLetters(team: string): { [string]: number }
 	local letters = {}
 	for zoneNum = 1, 3 do
@@ -866,34 +983,27 @@ function GameManager:_recalculateScores()
 		local total = 0
 		for zoneNum = 1, 3 do
 			local zoneConfig = Config.ZONES[zoneNum]
+			local basePts = zoneConfig.BASE_POINTS
 			local slots = self.slotOwners[zoneNum]
 
-			-- 기본 점수
-			local consecutive = 0
+			-- 연속 체인별 콤보 점수: base, base+1, base+2, ...
+			local runLen = 0
 			local allMine = true
 
 			for i = 1, zoneConfig.SLOTS do
 				if slots[i] == team then
-					total = total + zoneConfig.BASE_POINTS
-					consecutive = consecutive + 1
+					runLen = runLen + 1
+					total = total + basePts + (runLen - 1) -- 콤보 보너스
 				else
-					-- 연속 보너스 정산
-					if consecutive >= 2 then
-						total = total + (Config.GAME.CONSECUTIVE_BONUS[consecutive] or 0)
-					end
-					consecutive = 0
+					runLen = 0
 					allMine = false
 				end
 			end
 
-			-- 마지막 연속 그룹 정산
-			if consecutive >= 2 then
-				total = total + (Config.GAME.CONSECUTIVE_BONUS[consecutive] or 0)
-			end
-
-			-- 그랜드 슬램 체크
+			-- 올킬: 트레이 전체 채움 → 마지막 공 2배 (추가분만 더함)
 			if allMine and slots[1] == team then
-				total = total + zoneConfig.GRAND_SLAM_BONUS
+				local lastBallPts = basePts + (zoneConfig.SLOTS - 1)
+				total = total + lastBallPts -- 2배 = 기존 + 추가 1배
 			end
 		end
 
@@ -922,9 +1032,19 @@ function GameManager:_endMatch()
 		winner = "draw"
 	end
 
+	-- 랭크 계산 (MatchEnd에 포함하기 위해 여기서 처리)
+	local pRankChange, oRankChange = 0, 0
+	if self.opponent then
+		pRankChange, oRankChange = RankManager.applyPvPResult(self.player, self.opponent, winner)
+	else
+		pRankChange = RankManager.applyAIResult(self.player, winner)
+	end
+
 	self:_fireClient("MatchEnd", self.player, {
 		winner = winner,
 		scores = self.scores,
+		rankChange = pRankChange,
+		newRank = RankManager.getRank(self.player),
 	})
 	if self.opponent then
 		local oppWinner
@@ -934,6 +1054,8 @@ function GameManager:_endMatch()
 		self:_fireClient("MatchEnd", self.opponent, {
 			winner = oppWinner,
 			scores = { player = self.scores.ai, ai = self.scores.player },
+			rankChange = oRankChange,
+			newRank = RankManager.getRank(self.opponent),
 		})
 	end
 
@@ -945,7 +1067,7 @@ function GameManager:_endMatch()
 		self:_cleanupBalls()
 		self.state = "IDLE"
 		if self.onMatchEnd then
-			self.onMatchEnd()
+			self.onMatchEnd(winner)
 		end
 	end)
 end

@@ -21,7 +21,7 @@ function AIPlayer.new(slotPositions: { [number]: { Vector3 } })
 end
 
 -- AI가 발사 파라미터를 결정 (방향, 파워, 스핀, 발사X위치)
-function AIPlayer:decide(slotOwners: { [number]: { string? } }): (Vector3, number, number, number)
+function AIPlayer:decide(slotOwners: { [number]: { string? } }, wind: { speed: number, angle: number }?): (Vector3, number, number, number)
 	local targetZone, targetSlot = self:_pickTarget(slotOwners)
 
 	-- 좌우 끝에서 발사 (플레이어와 동일한 전략)
@@ -33,6 +33,15 @@ function AIPlayer:decide(slotOwners: { [number]: { string? } }): (Vector3, numbe
 
 	-- 스핀: 안쪽으로 커브 (오른쪽발사→R스핀=-, 왼쪽발사→L스핀=+)
 	local spin = -side * (0.10 + math.random() * 0.06)
+
+	-- 바람 보정: 바람의 X 성분 반대로 스핀 소폭 조정
+	if wind and wind.speed > 0 then
+		local rad = math.rad(wind.angle)
+		local windX = math.cos(rad) * wind.speed
+		-- 바람이 오른쪽으로 불면 왼쪽 스핀 추가 (스킬 비례)
+		local windCompensation = -windX * 0.008 * self.skill
+		spin = spin + windCompensation
+	end
 
 	-- 파워: 물리 역산 프리셋
 	local preset = ZONE_PRESETS[targetZone]

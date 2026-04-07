@@ -56,6 +56,7 @@ function UIController:_createUI()
 	self:_createResultScreen(gui)
 	self:_createMissionPanel(gui)
 	self:_createEmojiPanel(gui)
+	self:_createWindIndicator(gui)
 end
 
 -- ===== 상단: 턴 인디케이터 + 볼 카운트 + 턴 타이머 =====
@@ -375,6 +376,41 @@ function UIController:_createScoreBoard(gui)
 	local oppWorldModel = Instance.new("WorldModel")
 	oppWorldModel.Parent = oppCharVP
 	self.elements.oppCharWorldModel = oppWorldModel
+
+	-- ===== 랭크 라벨 (스코어보드 바로 위) =====
+	local rankH = isMobile and 16 or 20
+
+	-- 내 랭크 (왼쪽 스코어박스 위)
+	local myRankLabel = Instance.new("TextLabel")
+	myRankLabel.Name = "MyRankLabel"
+	myRankLabel.Size = UDim2.new(0.2, 0, 0, rankH)
+	myRankLabel.Position = UDim2.new(0, 2, 0, -rankH - 2)
+	myRankLabel.BackgroundTransparency = 1
+	myRankLabel.Text = ""
+	myRankLabel.TextColor3 = Color3.fromRGB(255, 210, 50)
+	myRankLabel.Font = FONT_MEDIUM
+	myRankLabel.TextScaled = true
+	myRankLabel.TextXAlignment = Enum.TextXAlignment.Left
+	myRankLabel.ZIndex = 2
+	myRankLabel.Parent = scoreRow
+	addStroke(myRankLabel, Color3.fromRGB(120, 80, 0), 1)
+	self.elements.myRankLabel = myRankLabel
+
+	-- 상대 랭크 (오른쪽 스코어박스 위)
+	local oppRankLabel = Instance.new("TextLabel")
+	oppRankLabel.Name = "OppRankLabel"
+	oppRankLabel.Size = UDim2.new(0.2, 0, 0, rankH)
+	oppRankLabel.Position = UDim2.new(0.8, -2, 0, -rankH - 2)
+	oppRankLabel.BackgroundTransparency = 1
+	oppRankLabel.Text = ""
+	oppRankLabel.TextColor3 = Color3.fromRGB(255, 210, 50)
+	oppRankLabel.Font = FONT_MEDIUM
+	oppRankLabel.TextScaled = true
+	oppRankLabel.TextXAlignment = Enum.TextXAlignment.Right
+	oppRankLabel.ZIndex = 2
+	oppRankLabel.Parent = scoreRow
+	addStroke(oppRankLabel, Color3.fromRGB(120, 80, 0), 1)
+	self.elements.oppRankLabel = oppRankLabel
 end
 
 -- ===== 캐릭터 뷰포트 로딩 =====
@@ -649,8 +685,8 @@ end
 function UIController:_createResultScreen(gui)
 	local resultFrame = Instance.new("Frame")
 	resultFrame.Name = "ResultFrame"
-	resultFrame.Size = UDim2.new(0, 350, 0, 160)
-	resultFrame.Position = UDim2.new(0.5, -175, 0.5, -80)
+	resultFrame.Size = UDim2.new(0, 350, 0, 195)
+	resultFrame.Position = UDim2.new(0.5, -175, 0.5, -97)
 	resultFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	resultFrame.BackgroundTransparency = 0.03
 	resultFrame.BorderSizePixel = 0
@@ -662,7 +698,7 @@ function UIController:_createResultScreen(gui)
 
 	local resultText = Instance.new("TextLabel")
 	resultText.Name = "ResultText"
-	resultText.Size = UDim2.new(0.9, 0, 0.5, 0)
+	resultText.Size = UDim2.new(0.9, 0, 0.38, 0)
 	resultText.Position = UDim2.new(0.05, 0, 0.05, 0)
 	resultText.BackgroundTransparency = 1
 	resultText.Text = ""
@@ -675,8 +711,8 @@ function UIController:_createResultScreen(gui)
 
 	local resultScore = Instance.new("TextLabel")
 	resultScore.Name = "ResultScore"
-	resultScore.Size = UDim2.new(0.9, 0, 0.3, 0)
-	resultScore.Position = UDim2.new(0.05, 0, 0.58, 0)
+	resultScore.Size = UDim2.new(0.9, 0, 0.22, 0)
+	resultScore.Position = UDim2.new(0.05, 0, 0.44, 0)
 	resultScore.BackgroundTransparency = 1
 	resultScore.Text = ""
 	resultScore.TextColor3 = Color3.fromRGB(80, 80, 100)
@@ -991,6 +1027,85 @@ function UIController:_createEmojiPanel(gui)
 		self._emojiOpen = not self._emojiOpen
 		emojiPanel.Visible = self._emojiOpen
 	end)
+end
+
+-- ===== 바람 인디케이터 (좌하단, 이모지 버튼 위) =====
+function UIController:_createWindIndicator(gui)
+	-- 컨테이너
+	local windFrame = Instance.new("Frame")
+	windFrame.Name = "WindIndicator"
+	windFrame.Size = UDim2.new(0, 46, 0, 52)
+	windFrame.Position = UDim2.new(0, 10, 1, -340)
+	windFrame.BackgroundTransparency = 1
+	windFrame.ZIndex = 5
+	windFrame.Visible = false
+	windFrame.Parent = gui
+
+	-- 화살표 (▲를 극단적 세로 비율로 늘려서 길쭉한 화살표)
+	local arrow = Instance.new("TextLabel")
+	arrow.Name = "WindArrow"
+	arrow.Size = UDim2.new(0, 14, 0, 46)
+	arrow.Position = UDim2.new(0.5, -7, 0, -6)
+	arrow.BackgroundTransparency = 1
+	arrow.Text = "\u{25B2}" -- ▲
+	arrow.TextColor3 = Color3.fromRGB(200, 215, 245)
+	arrow.Font = FONT_TITLE
+	arrow.TextScaled = true
+	arrow.ZIndex = 5
+	arrow.Rotation = 0
+	arrow.Parent = windFrame
+	addStroke(arrow, Color3.fromRGB(40, 60, 120), 1)
+
+	-- 세기 텍스트 (작게)
+	local speedText = Instance.new("TextLabel")
+	speedText.Name = "WindSpeed"
+	speedText.Size = UDim2.new(1, 4, 0, 13)
+	speedText.Position = UDim2.new(0, -2, 1, -15)
+	speedText.BackgroundTransparency = 1
+	speedText.Text = "0"
+	speedText.TextColor3 = Color3.fromRGB(200, 215, 245)
+	speedText.Font = FONT_MEDIUM
+	speedText.TextSize = 11
+	speedText.ZIndex = 5
+	speedText.Parent = windFrame
+	addStroke(speedText, Color3.fromRGB(30, 40, 80), 1)
+
+	self.elements.windFrame = windFrame
+	self.elements.windArrow = arrow
+	self.elements.windSpeed = speedText
+end
+
+function UIController:updateWind(speed: number, angle: number)
+	local wf = self.elements.windFrame
+	if not wf then return end
+	wf.Visible = true
+
+	-- 화살표 회전 (0도=오른쪽→ 화면상 위가 +Z이므로 angle 변환)
+	-- angle은 서버의 X-Z 평면 각도: 0=+X, 90=+Z
+	-- UI 회전: 0=위, 시계 방향 증가
+	self.elements.windArrow.Rotation = angle - 90
+
+	-- 세기 텍스트 (간결하게)
+	self.elements.windSpeed.Text = string.format("%.0fm/s", speed)
+
+	-- 강풍 시 색 변경
+	if speed >= 8 then
+		self.elements.windArrow.TextColor3 = Color3.fromRGB(255, 80, 60)
+		self.elements.windSpeed.TextColor3 = Color3.fromRGB(255, 80, 60)
+		local s = self.elements.windArrow:FindFirstChildOfClass("UIStroke")
+		if s then s.Color = Color3.fromRGB(150, 30, 20) end
+	else
+		self.elements.windArrow.TextColor3 = Color3.fromRGB(220, 230, 255)
+		self.elements.windSpeed.TextColor3 = Color3.fromRGB(220, 230, 255)
+		local s = self.elements.windArrow:FindFirstChildOfClass("UIStroke")
+		if s then s.Color = Color3.fromRGB(40, 60, 120) end
+	end
+end
+
+function UIController:hideWind()
+	if self.elements.windFrame then
+		self.elements.windFrame.Visible = false
+	end
 end
 
 -- 이모지 애니메이션 (캐릭터 뷰포트 옆에서 위로 떠오르며 사라짐)
@@ -1417,7 +1532,7 @@ function UIController:updateSpinIndicator(spin: number, power: number?)
 		local frame = Instance.new("Frame")
 		frame.Name = "SpinFrame"
 		frame.Size = UDim2.new(0, 90, 0, 110)
-		frame.Position = UDim2.new(0, 10, 0.40, 0)
+		frame.Position = UDim2.new(0, 10, 0.28, 0)
 		frame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 		frame.BackgroundTransparency = 0.08
 		frame.BorderSizePixel = 0
@@ -1762,6 +1877,50 @@ function UIController:showScorePopup(position: Vector3, points: number, team: st
 	end)
 end
 
+-- ===== 콤보/올킬 팝업 (화면 중앙) =====
+function UIController:showComboPopup(comboCount: number, isAllKill: boolean, team: string)
+	local text, color
+	if isAllKill then
+		text = "All Kill!"
+		color = Color3.fromRGB(255, 60, 40)
+	else
+		text = comboCount .. "x Combo!"
+		color = team == "player" and Color3.fromRGB(255, 180, 30) or Color3.fromRGB(100, 180, 255)
+	end
+
+	local label = Instance.new("TextLabel")
+	label.Name = "ComboPopup"
+	label.Size = UDim2.new(0, 350, 0, 70)
+	label.Position = UDim2.new(0.5, 0, 0.42, 0)
+	label.AnchorPoint = Vector2.new(0.5, 0.5)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = color
+	label.Font = FONT_TITLE
+	label.TextSize = 0
+	label.TextStrokeTransparency = 0.1
+	label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	label.ZIndex = 15
+	label.Parent = self.gui
+
+	-- 팝 애니메이션
+	TweenService:Create(label, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		TextSize = isAllKill and 52 or 44,
+	}):Play()
+
+	-- 페이드 아웃
+	task.delay(0.8, function()
+		TweenService:Create(label, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Position = UDim2.new(0.5, 0, 0.37, 0),
+			TextTransparency = 1,
+			TextStrokeTransparency = 1,
+		}):Play()
+		task.delay(0.5, function()
+			label:Destroy()
+		end)
+	end)
+end
+
 -- ===== 타이밍 등급 팝업 (화면 중앙) =====
 function UIController:showTimingGrade(gradeName: string, gradeColor: Color3)
 	local label = Instance.new("TextLabel")
@@ -1811,6 +1970,10 @@ end
 
 function UIController:hideResult()
 	self.elements.resultFrame.Visible = false
+	if self.elements.resultRank then
+		self.elements.resultRank:Destroy()
+		self.elements.resultRank = nil
+	end
 	self:clearMatchCharacters()
 end
 
@@ -1911,7 +2074,22 @@ function UIController:hideLaunchGuide()
 	end
 end
 
-function UIController:showMatchResult(winner: string, scores)
+function UIController:setRanks(myRank: number, oppRank: number)
+	if self.elements.myRankLabel then
+		self.elements.myRankLabel.Text = "R " .. tostring(myRank)
+	end
+	if self.elements.oppRankLabel then
+		if oppRank > 0 then
+			self.elements.oppRankLabel.Text = "R " .. tostring(oppRank)
+			self.elements.oppRankLabel.Visible = true
+		else
+			self.elements.oppRankLabel.Text = ""
+			self.elements.oppRankLabel.Visible = false
+		end
+	end
+end
+
+function UIController:showMatchResult(winner: string, scores, rankChange: number?, newRank: number?)
 	self.elements.resultFrame.Visible = true
 
 	local rt = self.elements.resultText
@@ -1932,6 +2110,38 @@ function UIController:showMatchResult(winner: string, scores)
 	end
 
 	self.elements.resultScore.Text = string.format("%d - %d", scores.player, scores.ai)
+
+	-- 랭크 변동 표시
+	if self.elements.resultRank then
+		self.elements.resultRank:Destroy()
+	end
+	if newRank and rankChange then
+		local rankLabel = Instance.new("TextLabel")
+		rankLabel.Name = "ResultRank"
+		rankLabel.Size = UDim2.new(0.9, 0, 0.22, 0)
+		rankLabel.Position = UDim2.new(0.05, 0, 0.70, 0)
+		rankLabel.BackgroundTransparency = 1
+		rankLabel.Font = FONT_BOLD
+		rankLabel.TextScaled = true
+		rankLabel.ZIndex = 21
+		rankLabel.Parent = self.elements.resultFrame
+
+		local sign = rankChange >= 0 and "+" or ""
+		rankLabel.Text = string.format("%d ( %s%d )", newRank, sign, rankChange)
+
+		if rankChange > 0 then
+			rankLabel.TextColor3 = Color3.fromRGB(255, 210, 50)
+			addStroke(rankLabel, Color3.fromRGB(180, 120, 0), 2)
+		elseif rankChange < 0 then
+			rankLabel.TextColor3 = Color3.fromRGB(180, 90, 90)
+			addStroke(rankLabel, Color3.fromRGB(100, 40, 40), 2)
+		else
+			rankLabel.TextColor3 = Color3.fromRGB(150, 150, 170)
+			addStroke(rankLabel, Color3.fromRGB(80, 80, 100), 2)
+		end
+
+		self.elements.resultRank = rankLabel
+	end
 end
 
 -- ===== 매칭 발견 팝업 =====
